@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/status").permitAll()      // ← add this line
                         .requestMatchers("/api/auth/login").permitAll()       // ← add this too
+                        .requestMatchers("/api/auth/refreshtoken").permitAll() // allow refresh tokens
                         .requestMatchers("/oauth2/**", "/login/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()

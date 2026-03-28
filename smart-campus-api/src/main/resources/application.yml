@@ -40,7 +40,8 @@ server:
 app:
   jwt:
     secret: ${JWT_SECRET_KEY}
-    expiration-ms: 86400000  # 24 hours
+    expiration-ms: 900000  # 15 minutes
+    refresh-expiration-ms: 604800000 # 7 days
   oauth2:
     redirect-uri: http://localhost:5173/auth/callback
   frontend:
