@@ -12,11 +12,11 @@ import jakarta.validation.Valid;
 import com.smartcampus.api.security.JwtService;
 import com.smartcampus.api.security.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -36,21 +36,18 @@ public class AuthController {
         try {
             return ResponseEntity.ok(authService.login(request));
         } catch (RuntimeException e) {
-            Map<String, String> response = new HashMap<>();
             String msg = e.getMessage();
-            response.put("message", msg);
 
-            // User not found
             if (msg != null && msg.contains("No account found")) {
-                return ResponseEntity.status(404).body(response);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse(msg, HttpStatus.NOT_FOUND.value()));
             }
-            // Email not verified
             if (msg != null && msg.contains("not verified")) {
-                return ResponseEntity.status(403).body(response);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ErrorResponse(msg, HttpStatus.FORBIDDEN.value()));
             }
-            // Bad credentials (wrong password)
-            response.put("message", "Invalid password.");
-            return ResponseEntity.status(401).body(response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse("Invalid password.", HttpStatus.UNAUTHORIZED.value()));
         }
     }
 
@@ -58,13 +55,11 @@ public class AuthController {
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
         try {
             authService.register(request);
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Registration successful. Please check your email for the OTP.");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("message", "Registration successful. Please check your email for the OTP."));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value()));
         }
     }
 
@@ -72,13 +67,10 @@ public class AuthController {
     public ResponseEntity<?> verifyEmail(@Valid @RequestBody VerifyOtpRequest request) {
         try {
             authService.verifyEmail(request.getEmail(), request.getOtp());
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Email verified successfully. You can now login.");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now login."));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value()));
         }
     }
 
@@ -87,13 +79,10 @@ public class AuthController {
         try {
             User user = userService.findByEmail(request.getEmail());
             otpService.generateAndSendOtp(user, null);
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "A new verification code has been sent to your email.");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(Map.of("message", "A new verification code has been sent to your email."));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value()));
         }
     }
 
@@ -102,39 +91,28 @@ public class AuthController {
         try {
             passwordResetService.initiatePasswordReset(request.getEmail());
         } catch (RuntimeException e) {
-            // Only surface cooldown errors; silently succeed for other cases
             if (e.getMessage().contains("wait")) {
-                Map<String, String> response = new HashMap<>();
-                response.put("error", e.getMessage());
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest()
+                        .body(new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value()));
             }
         }
-        // Always return same message to prevent user enumeration
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "If an account exists with that email, a reset link has been sent.");
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(Map.of("message", "If an account exists with that email, a reset link has been sent."));
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         try {
             passwordResetService.resetPassword(request.getEmail(), request.getToken(), request.getNewPassword());
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Password reset successfully. You can now log in.");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(Map.of("message", "Password reset successfully. You can now log in."));
         } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value()));
         }
     }
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, String>> getStatus() {
-        Map<String, String> response = new HashMap<>();
-        response.put("status", "running");
-        response.put("phase", "oauth2");
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(Map.of("status", "running", "phase", "oauth2"));
     }
 
     @GetMapping("/me")
@@ -143,8 +121,8 @@ public class AuthController {
         return ResponseEntity.ok(userService.convertToDTO(user));
     }
 
-    @PostMapping("/refreshtoken")
-    public ResponseEntity<TokenRefreshResponse> refreshtoken(@RequestBody TokenRefreshRequest request) {
+    @PostMapping("/refresh-token")
+    public ResponseEntity<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
 
         return refreshTokenService.findByToken(requestRefreshToken)
@@ -162,9 +140,6 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> logout(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         refreshTokenService.deleteByUserId(user.getId());
-
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Logged out successfully");
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 }

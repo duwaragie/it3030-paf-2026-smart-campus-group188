@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -32,7 +32,7 @@ export default function RegisterPage() {
     try {
       setIsLoading(true);
       setError(null);
-      await api.post('/auth/register', data);
+      await authService.register(data.name, data.email, data.password);
       navigate(`/verify?email=${encodeURIComponent(data.email)}`);
     } catch (err) {
       const errorResponse = err as { response?: { data?: { message?: string } } };

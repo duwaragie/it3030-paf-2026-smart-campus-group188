@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 
 const schema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
     try {
       setIsLoading(true);
       setError(null);
-      await api.post('/auth/forgot-password', { email: data.email });
+      await authService.forgotPassword(data.email);
       setSent(true);
     } catch (err) {
       const errorResponse = err as { response?: { data?: { error?: string } } };

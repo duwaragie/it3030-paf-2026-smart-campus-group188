@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 import { Logo } from '@/components/Logo';
 
 export default function OAuthRedirectHandler() {
@@ -26,7 +26,7 @@ export default function OAuthRedirectHandler() {
             id: 0, name: '', email: '', picture: '',
             role: 'USER', authProvider: 'GOOGLE', isEmailVerified: true,
           });
-          const res = await api.get('/auth/me');
+          const res = await authService.getMe();
           setAuth(token, refreshToken, res.data);
           navigate('/');
         } catch (err) {
