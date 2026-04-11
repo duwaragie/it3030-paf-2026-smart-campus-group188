@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 
 const schema = z
   .object({
@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
     try {
       setIsLoading(true);
       setError(null);
-      await api.post('/auth/reset-password', { email, token, newPassword: data.newPassword });
+      await authService.resetPassword(email!, token!, data.newPassword);
       setSuccess(true);
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {

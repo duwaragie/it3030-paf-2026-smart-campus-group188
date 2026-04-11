@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
 
 const loginSchema = z.object({
@@ -33,7 +33,7 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await api.post('/auth/login', data);
+      const res = await authService.login(data.email, data.password);
       const { accessToken, refreshToken, user } = res.data;
       setAuth(accessToken, refreshToken, user);
       navigate('/');

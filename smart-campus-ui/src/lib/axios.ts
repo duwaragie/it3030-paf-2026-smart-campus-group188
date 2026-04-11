@@ -76,7 +76,7 @@ api.interceptors.response.use(
       try {
         // Use raw axios (not api) to avoid interceptor loop
         const response = await axios.post(
-          `${API_URL}/auth/refreshtoken`,
+          `${API_URL}/auth/refresh-token`,
           { refreshToken },
           { headers: { 'Content-Type': 'application/json' } }
         );
