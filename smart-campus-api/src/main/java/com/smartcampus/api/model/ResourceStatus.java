@@ -1,0 +1,7 @@
+package com.smartcampus.api.model;
+
+public enum ResourceStatus {
+    ACTIVE,
+    OUT_OF_SERVICE,
+    UNDER_MAINTENANCE
+}
