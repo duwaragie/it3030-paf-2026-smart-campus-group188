@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import axios from 'axios';
 
 export interface User {
   id: number;
@@ -21,16 +22,26 @@ interface AuthState {
   updateUser: (user: Partial<User>) => void;
 }
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       refreshToken: null,
       user: null,
       isAuthenticated: false,
       setAuth: (token, refreshToken, user) =>
         set({ token, refreshToken, user, isAuthenticated: true }),
-      logout: () => set({ token: null, refreshToken: null, user: null, isAuthenticated: false }),
+      logout: () => {
+        const token = get().token;
+        if (token) {
+          axios.post(`${API_URL}/auth/logout`, {}, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => { /* best-effort: clear local state regardless */ });
+        }
+        set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+      },
       updateUser: (updatedUser) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...updatedUser } : null,

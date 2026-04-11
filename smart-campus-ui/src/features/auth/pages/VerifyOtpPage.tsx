@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '../components/AuthLayout';
-import { api } from '@/lib/axios';
+import { authService } from '@/services/authService';
 
 export default function VerifyOtpPage() {
   const [searchParams] = useSearchParams();
@@ -35,7 +35,7 @@ export default function VerifyOtpPage() {
     try {
       setIsResending(true);
       setError(null);
-      await api.post('/auth/resend-otp', { email });
+      await authService.resendOtp(email!);
       setCooldown(60);
     } catch (err) {
       const errorResponse = err as { response?: { data?: { error?: string } } };
@@ -79,7 +79,7 @@ export default function VerifyOtpPage() {
     try {
       setIsLoading(true);
       setError(null);
-      await api.post('/auth/verify-email', { email, otp: otpCode });
+      await authService.verifyEmail(email!, otpCode);
       setSuccess('Email verified successfully!');
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
