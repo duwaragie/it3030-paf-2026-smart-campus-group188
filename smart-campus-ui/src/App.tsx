@@ -14,6 +14,7 @@ import FacilitiesPage from './features/admin/pages/FacilitiesPage';
 import BookingsPage from './features/admin/pages/BookingsPage';
 import IncidentsPage from './features/admin/pages/IncidentsPage';
 import NotificationsPage from './features/admin/pages/NotificationsPage';
+import FacilitiesCataloguePage from './features/public/pages/FacilitiesCataloguePage';
 import { useAuthStore } from './store/authStore';
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
@@ -49,6 +50,9 @@ function App() {
       {/* Protected routes */}
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      
+      {/* Facilities Catalogue - Read Only for all authenticated users */}
+      <Route path="/facilities" element={<ProtectedRoute><FacilitiesCataloguePage /></ProtectedRoute>} />
 
       {/* Admin routes */}
       <Route path="/admin/users" element={<RoleRoute roles={['ADMIN']}><UsersPage /></RoleRoute>} />
