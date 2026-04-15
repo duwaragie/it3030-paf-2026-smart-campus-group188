@@ -18,4 +18,6 @@ export const userService = {
   updateProfile: (data: UpdateProfilePayload) => api.put<User>('/users/profile', data),
   changePassword: (data: ChangePasswordPayload) =>
     api.put<{ message: string }>('/users/profile/password', data),
+  setPicture: (url: string) => api.put<User>('/users/profile/picture', { url }),
+  clearPicture: () => api.delete<User>('/users/profile/picture'),
 };

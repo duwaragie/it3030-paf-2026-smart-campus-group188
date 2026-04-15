@@ -42,4 +42,18 @@ public class UserProfileController {
         userService.changePassword(user.getId(), request);
         return ResponseEntity.ok(Map.of("message", "Password updated successfully."));
     }
+
+    @PutMapping("/picture")
+    public ResponseEntity<UserDTO> setPicture(
+            Authentication authentication,
+            @RequestBody Map<String, String> body) {
+        User user = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(userService.setProfilePicture(user.getId(), body.get("url")));
+    }
+
+    @DeleteMapping("/picture")
+    public ResponseEntity<UserDTO> clearPicture(Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(userService.clearProfilePicture(user.getId()));
+    }
 }

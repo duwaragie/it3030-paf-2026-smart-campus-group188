@@ -1,15 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import AppLayout from '@/components/layout/AppLayout';
 import { useAuthStore } from '@/store/authStore';
 import { userService } from '@/services/userService';
+import { storageService } from '@/services/storageService';
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  picture: z.string().optional(),
 });
+
+const isSupabaseUrl = (url: string | null | undefined) =>
+  !!url && url.includes('/storage/v1/object/public/uploads/');
+
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3 MB
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const passwordSchema = z
   .object({
@@ -44,9 +50,13 @@ export default function ProfilePage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
 
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const profileForm = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { name: user?.name || '', picture: user?.picture || '' },
+    defaultValues: { name: user?.name || '' },
   });
 
   const passwordForm = useForm<PasswordForm>({
@@ -56,7 +66,7 @@ export default function ProfilePage() {
   useEffect(() => {
     userService.getProfile().then((res) => {
       updateUser(res.data);
-      profileForm.reset({ name: res.data.name, picture: res.data.picture || '' });
+      profileForm.reset({ name: res.data.name });
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -72,6 +82,62 @@ export default function ProfilePage() {
       setProfileMsg({ type: 'error', text: 'Failed to update profile.' });
     } finally {
       setProfileLoading(false);
+    }
+  };
+
+  const onPickAvatar = () => {
+    setAvatarMsg(null);
+    fileInputRef.current?.click();
+  };
+
+  const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      setAvatarMsg({ type: 'error', text: 'Please use a JPG, PNG, WebP, or GIF image.' });
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setAvatarMsg({ type: 'error', text: 'Please keep the file under 3 MB.' });
+      return;
+    }
+
+    try {
+      setAvatarBusy(true);
+      setAvatarMsg(null);
+      const previousUrl = user?.picture;
+      const uploadedUrl = await storageService.upload(file, 'avatars');
+      const res = await userService.setPicture(uploadedUrl);
+      updateUser(res.data);
+      if (isSupabaseUrl(previousUrl) && previousUrl !== uploadedUrl) {
+        storageService.remove(previousUrl!).catch(() => { /* ignore cleanup failures */ });
+      }
+      setAvatarMsg({ type: 'success', text: 'Profile photo updated.' });
+    } catch (err) {
+      const e = err as { message?: string };
+      setAvatarMsg({ type: 'error', text: e.message || 'Upload failed. Please try again.' });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const onRemoveAvatar = async () => {
+    try {
+      setAvatarBusy(true);
+      setAvatarMsg(null);
+      const previousUrl = user?.picture;
+      const res = await userService.clearPicture();
+      updateUser(res.data);
+      if (isSupabaseUrl(previousUrl)) {
+        storageService.remove(previousUrl!).catch(() => { /* ignore cleanup failures */ });
+      }
+      setAvatarMsg({ type: 'success', text: 'Profile photo removed.' });
+    } catch {
+      setAvatarMsg({ type: 'error', text: 'Could not remove photo. Please try again.' });
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -101,9 +167,34 @@ export default function ProfilePage() {
         {/* Left column: identity + account info */}
         <div className="space-y-5 lg:sticky lg:top-24">
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ALLOWED_AVATAR_TYPES.join(',')}
+              className="hidden"
+              onChange={onAvatarSelected}
+            />
             <div className="flex flex-col items-center text-center gap-2.5">
-              <div className="w-16 h-16 rounded-full bg-campus-600 text-white flex items-center justify-center text-xl font-bold ring-4 ring-campus-100">
-                {user?.name?.charAt(0)?.toUpperCase() || '?'}
+              <div className="relative">
+                {user?.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name || 'Profile'}
+                    className="w-20 h-20 rounded-full object-cover ring-4 ring-campus-100"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-campus-600 text-white flex items-center justify-center text-2xl font-bold ring-4 ring-campus-100">
+                    {user?.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
+                {avatarBusy && (
+                  <div className="absolute inset-0 rounded-full bg-white/70 backdrop-blur-sm flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-gray-200 border-t-campus-600 rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
               <div>
                 <h1 className="text-lg font-bold text-campus-900">{user?.name}</h1>
@@ -116,6 +207,37 @@ export default function ProfilePage() {
                 <span className="text-[11px] text-gray-400">
                   Member since {new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </span>
+              )}
+
+              <div className="flex items-center gap-2 pt-3 w-full">
+                <button
+                  onClick={onPickAvatar}
+                  disabled={avatarBusy}
+                  className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-campus-800 hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
+                  </svg>
+                  {user?.picture ? 'Change photo' : 'Upload photo'}
+                </button>
+                {user?.picture && (
+                  <button
+                    onClick={onRemoveAvatar}
+                    disabled={avatarBusy}
+                    className="h-9 px-3 inline-flex items-center justify-center rounded-lg border border-gray-200 text-xs font-semibold text-red-600 hover:bg-red-50 hover:border-red-100 disabled:opacity-60 transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {avatarMsg && (
+                <p
+                  className={`text-[11px] font-medium ${
+                    avatarMsg.type === 'success' ? 'text-emerald-600' : 'text-red-500'
+                  }`}
+                >
+                  {avatarMsg.text}
+                </p>
               )}
             </div>
           </div>
@@ -165,23 +287,16 @@ export default function ProfilePage() {
               </div>
             )}
             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-700 mb-1 block">Full Name</label>
-                  <input {...profileForm.register('name')} className={inputCls} />
-                  {profileForm.formState.errors.name && (
-                    <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.name.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-700 mb-1 block">Picture URL</label>
-                  <input
-                    {...profileForm.register('picture')}
-                    placeholder="https://..."
-                    className={inputCls}
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Full Name</label>
+                <input {...profileForm.register('name')} className={inputCls} />
+                {profileForm.formState.errors.name && (
+                  <p className="text-xs text-red-500 mt-1">{profileForm.formState.errors.name.message}</p>
+                )}
               </div>
+              <p className="text-[11px] text-gray-400">
+                Manage your profile photo from the card on the left.
+              </p>
               <button type="submit" disabled={profileLoading} className={btnCls}>
                 {profileLoading ? 'Saving...' : 'Save Changes'}
               </button>

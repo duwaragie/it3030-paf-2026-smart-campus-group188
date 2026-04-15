@@ -132,6 +132,23 @@ public class UserService {
         return convertToDTO(userRepository.save(user));
     }
 
+    public UserDTO setProfilePicture(Long userId, String url) {
+        if (url == null || url.isBlank()) {
+            throw new RuntimeException("Picture URL is required.");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
+        user.setPicture(url.trim());
+        return convertToDTO(userRepository.save(user));
+    }
+
+    public UserDTO clearProfilePicture(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
+        user.setPicture(null);
+        return convertToDTO(userRepository.save(user));
+    }
+
     public void changePassword(Long userId, ChangePasswordRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));

@@ -66,9 +66,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <p className="text-[11px] text-gray-400">{user?.role}</p>
               </div>
               <Link to="/profile" aria-label="Open profile">
-                <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center text-sm font-bold ring-2 ring-campus-100 hover:ring-campus-300 transition-all">
-                  {user?.name?.charAt(0)?.toUpperCase() || '?'}
-                </div>
+                {user?.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name || 'Profile'}
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-campus-100 hover:ring-campus-300 transition-all"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center text-sm font-bold ring-2 ring-campus-100 hover:ring-campus-300 transition-all">
+                    {user?.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
               </Link>
 
               {/* Hover dropdown */}
