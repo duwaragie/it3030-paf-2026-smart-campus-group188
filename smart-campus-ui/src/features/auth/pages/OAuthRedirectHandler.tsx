@@ -24,11 +24,11 @@ export default function OAuthRedirectHandler() {
         try {
           useAuthStore.getState().setAuth(token, refreshToken, {
             id: 0, name: '', email: '', picture: '',
-            role: 'USER', authProvider: 'GOOGLE', emailVerified: true, createdAt: '', updatedAt: '',
+            role: 'USER', authProvider: 'GOOGLE', emailVerified: true, profileComplete: true, createdAt: '', updatedAt: '',
           });
           const res = await authService.getMe();
           setAuth(token, refreshToken, res.data);
-          navigate('/');
+          navigate('/dashboard');
         } catch (err) {
           console.error("Failed fetching user profile", err);
           navigate('/login');

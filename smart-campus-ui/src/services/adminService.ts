@@ -6,6 +6,9 @@ export interface UserDTO {
   name: string;
   picture: string;
   role: string;
+  studentRegistrationNumber?: string | null;
+  employeeId?: string | null;
+  profileComplete?: boolean;
 }
 
 export interface CreateUserPayload {
@@ -13,6 +16,7 @@ export interface CreateUserPayload {
   email: string;
   password: string;
   role: 'LECTURER' | 'ADMIN';
+  employeeId: string;
 }
 
 export const adminService = {
@@ -28,6 +32,14 @@ export const adminService = {
   deleteUser: (id: number) =>
     api.delete(`/admin/users/${id}`),
 
+  bulkDeleteUsers: (ids: number[]) =>
+    api.post<{ deleted: number }>('/admin/users/bulk-delete', { ids }),
+
   createUser: (data: CreateUserPayload) =>
     api.post<UserDTO>('/admin/users', data),
+
+  assignIdentifier: (
+    id: number,
+    payload: { studentRegistrationNumber?: string; employeeId?: string }
+  ) => api.patch<UserDTO>(`/admin/users/${id}/identifier`, null, { params: payload }),
 };

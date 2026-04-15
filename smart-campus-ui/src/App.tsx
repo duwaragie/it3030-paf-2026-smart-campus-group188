@@ -8,22 +8,35 @@ import ForgotPasswordPage from './features/auth/pages/ForgotPasswordPage';
 import ResetPasswordPage from './features/auth/pages/ResetPasswordPage';
 import DashboardPage from './features/dashboard/pages/DashboardPage';
 import ProfilePage from './features/profile/pages/ProfilePage';
+import CompleteProfilePage from './features/profile/pages/CompleteProfilePage';
 import UsersPage from './features/admin/pages/UsersPage';
 import RegisterUserPage from './features/admin/pages/RegisterUserPage';
 import FacilitiesPage from './features/admin/pages/FacilitiesPage';
 import BookingsPage from './features/admin/pages/BookingsPage';
 import IncidentsPage from './features/admin/pages/IncidentsPage';
 import NotificationsPage from './features/admin/pages/NotificationsPage';
+import LandingPage from './features/landing/pages/LandingPage';
+import AboutPage from './features/landing/pages/AboutPage';
+import ContactPage from './features/landing/pages/ContactPage';
+import ScrollToTop from './components/ScrollToTop';
 import { useAuthStore } from './store/authStore';
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user && user.profileComplete === false) return <Navigate to="/complete-profile" replace />;
+  return children;
+}
+
+function AuthenticatedRoute({ children }: { children: React.ReactElement }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 function PublicRoute({ children }: { children: React.ReactElement }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return !isAuthenticated ? children : <Navigate to="/" replace />;
+  return !isAuthenticated ? children : <Navigate to="/dashboard" replace />;
 }
 
 function RoleRoute({ children, roles }: { children: React.ReactElement; roles: string[] }) {
@@ -31,13 +44,21 @@ function RoleRoute({ children, roles }: { children: React.ReactElement; roles: s
   const user = useAuthStore((state) => state.user);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!user || !roles.includes(user.role)) return <Navigate to="/" replace />;
+  if (user && user.profileComplete === false) return <Navigate to="/complete-profile" replace />;
+  if (!user || !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
 function App() {
   return (
+    <>
+    <ScrollToTop />
     <Routes>
+      {/* Public marketing */}
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+
       {/* Public auth routes */}
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
@@ -46,8 +67,11 @@ function App() {
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
       <Route path="/oauth2/redirect" element={<OAuthRedirectHandler />} />
 
+      {/* Profile completion gate (authenticated but profile incomplete) */}
+      <Route path="/complete-profile" element={<AuthenticatedRoute><CompleteProfilePage /></AuthenticatedRoute>} />
+
       {/* Protected routes */}
-      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
       {/* Admin routes */}
@@ -61,6 +85,7 @@ function App() {
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 

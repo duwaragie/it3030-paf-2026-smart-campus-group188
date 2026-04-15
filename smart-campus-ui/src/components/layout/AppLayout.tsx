@@ -11,7 +11,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: 'M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z' },
+  { label: 'Dashboard', href: '/dashboard', icon: 'M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z' },
   { label: 'Profile', href: '/profile', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' },
   { label: 'Facilities', href: '/admin/facilities', icon: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z', roles: ['ADMIN'] },
   { label: 'Bookings', href: '/admin/bookings', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z', roles: ['ADMIN'] },
@@ -31,7 +31,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   );
 
   const isActive = (href: string) =>
-    href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
+    href === '/dashboard' ? location.pathname === '/dashboard' : location.pathname.startsWith(href);
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -39,12 +39,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Logo variant="dark" size="sm" />
+            <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
+              <Logo variant="dark" size="sm" />
+            </Link>
             <nav className="hidden md:flex items-center gap-1">
               {['Dashboard', 'Courses', 'Research', 'Campus'].map((item, i) => (
                 <Link
                   key={item}
-                  to={i === 0 ? '/' : '#'}
+                  to={i === 0 ? '/dashboard' : '#'}
                   className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${i === 0 ? 'text-campus-800 bg-campus-50 font-semibold' : 'text-gray-500 hover:text-campus-700 hover:bg-gray-50'}`}
                 >
                   {item}
@@ -58,16 +60,53 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
             </button>
-            <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
+            <div className="relative group flex items-center gap-3 pl-3 border-l border-gray-200">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-campus-800 leading-tight">{user?.name}</p>
                 <p className="text-[11px] text-gray-400">{user?.role}</p>
               </div>
-              <Link to="/profile">
-                <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center text-sm font-bold ring-2 ring-campus-100 hover:ring-campus-300 transition-all">
-                  {user?.name?.charAt(0)?.toUpperCase() || '?'}
-                </div>
+              <Link to="/profile" aria-label="Open profile">
+                {user?.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name || 'Profile'}
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-campus-100 hover:ring-campus-300 transition-all"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center text-sm font-bold ring-2 ring-campus-100 hover:ring-campus-300 transition-all">
+                    {user?.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
               </Link>
+
+              {/* Hover dropdown */}
+              <div className="absolute right-0 top-full pt-3 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible focus-within:opacity-100 focus-within:visible transition-all duration-150">
+                <div className="bg-white border border-gray-100 rounded-xl shadow-lg py-2">
+                  <div className="px-4 py-2 border-b border-gray-50">
+                    <p className="text-sm font-semibold text-campus-800 truncate">{user?.name}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{user?.email}</p>
+                  </div>
+                  <Link
+                    to="/profile"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-campus-800 hover:bg-campus-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    View profile
+                  </Link>
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                    Log out
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -75,7 +114,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="hidden lg:flex w-[220px] flex-col bg-white border-r border-gray-200 min-h-[calc(100vh-64px)] sticky top-16">
+        <aside className="hidden lg:flex w-[220px] flex-col bg-white border-r border-gray-200 h-[calc(100vh-64px)] sticky top-16 overflow-y-auto">
           <div className="p-4">
             <div className="flex items-center gap-3 p-3 bg-campus-50 rounded-xl mb-6">
               <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center">
@@ -129,8 +168,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 lg:p-8 max-w-[1100px]">
-          <div className="animate-slide-up">
+        <main className="flex-1 p-6 lg:p-8">
+          <div className="max-w-[1400px] mx-auto animate-slide-up">
             {children}
           </div>
         </main>

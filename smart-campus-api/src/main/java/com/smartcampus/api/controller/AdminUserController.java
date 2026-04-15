@@ -48,10 +48,27 @@ public class AdminUserController {
         return ResponseEntity.ok(userService.updateRole(id, role));
     }
 
+    // PATCH /api/admin/users/{id}/identifier
+    @PatchMapping("/{id}/identifier")
+    public ResponseEntity<UserDTO> assignIdentifier(
+            @PathVariable Long id,
+            @RequestParam(required = false) String studentRegistrationNumber,
+            @RequestParam(required = false) String employeeId) {
+        return ResponseEntity.ok(userService.assignIdentifier(id, studentRegistrationNumber, employeeId));
+    }
+
     // DELETE /api/admin/users/{id}
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // POST /api/admin/users/bulk-delete  { "ids": [1,2,3] }
+    @PostMapping("/bulk-delete")
+    public ResponseEntity<java.util.Map<String, Integer>> bulkDelete(
+            @RequestBody java.util.Map<String, java.util.List<Long>> body) {
+        int deleted = userService.deleteUsers(body.getOrDefault("ids", java.util.List.of()));
+        return ResponseEntity.ok(java.util.Map.of("deleted", deleted));
     }
 }

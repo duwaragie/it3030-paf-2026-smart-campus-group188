@@ -46,9 +46,19 @@ public class UserService {
                 user.getRole(),
                 user.getAuthProvider(),
                 user.isEmailVerified(),
+                user.getStudentRegistrationNumber(),
+                user.getEmployeeId(),
+                isProfileComplete(user),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );
+    }
+
+    private boolean isProfileComplete(User user) {
+        if (user.getRole() == Role.STUDENT) {
+            return user.getStudentRegistrationNumber() != null && !user.getStudentRegistrationNumber().isBlank();
+        }
+        return user.getEmployeeId() != null && !user.getEmployeeId().isBlank();
     }
 
     public List<UserDTO> getAllUsers() {
@@ -65,11 +75,39 @@ public class UserService {
         return convertToDTO(userRepository.save(user));
     }
 
+    public UserDTO assignIdentifier(Long id, String studentRegistrationNumber, String employeeId) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
+
+        if (studentRegistrationNumber != null && !studentRegistrationNumber.isBlank()) {
+            String srn = studentRegistrationNumber.trim();
+            if (!srn.equals(user.getStudentRegistrationNumber()) && userRepository.existsByStudentRegistrationNumber(srn)) {
+                throw new RuntimeException("Registration number already in use.");
+            }
+            user.setStudentRegistrationNumber(srn);
+        }
+        if (employeeId != null && !employeeId.isBlank()) {
+            String eid = employeeId.trim();
+            if (!eid.equals(user.getEmployeeId()) && userRepository.existsByEmployeeId(eid)) {
+                throw new RuntimeException("Employee ID already in use.");
+            }
+            user.setEmployeeId(eid);
+        }
+        return convertToDTO(userRepository.save(user));
+    }
+
     public void deleteUser(Long id) {
         if (!userRepository.existsById(id)) {
             throw new UserNotFoundException(id);
         }
         userRepository.deleteById(id);
+    }
+
+    public int deleteUsers(java.util.List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        java.util.List<User> found = userRepository.findAllById(ids);
+        userRepository.deleteAll(found);
+        return found.size();
     }
 
     public UserDTO updateProfile(Long userId, UpdateProfileRequest request) {
@@ -79,6 +117,35 @@ public class UserService {
         if (request.getPicture() != null) {
             user.setPicture(request.getPicture());
         }
+
+        // Students may self-assign their registration number (once). Staff cannot self-assign employeeId.
+        if (request.getStudentRegistrationNumber() != null && !request.getStudentRegistrationNumber().isBlank()
+                && user.getRole() == Role.STUDENT
+                && (user.getStudentRegistrationNumber() == null || user.getStudentRegistrationNumber().isBlank())) {
+            String srn = request.getStudentRegistrationNumber().trim();
+            if (userRepository.existsByStudentRegistrationNumber(srn)) {
+                throw new RuntimeException("Registration number already in use.");
+            }
+            user.setStudentRegistrationNumber(srn);
+        }
+
+        return convertToDTO(userRepository.save(user));
+    }
+
+    public UserDTO setProfilePicture(Long userId, String url) {
+        if (url == null || url.isBlank()) {
+            throw new RuntimeException("Picture URL is required.");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
+        user.setPicture(url.trim());
+        return convertToDTO(userRepository.save(user));
+    }
+
+    public UserDTO clearProfilePicture(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId));
+        user.setPicture(null);
         return convertToDTO(userRepository.save(user));
     }
 
@@ -103,6 +170,13 @@ public class UserService {
         if (request.getRole() == Role.STUDENT) {
             throw new RuntimeException("Cannot create STUDENT accounts via admin endpoint.");
         }
+        String employeeId = request.getEmployeeId() != null ? request.getEmployeeId().trim() : "";
+        if (employeeId.isBlank()) {
+            throw new RuntimeException("Employee ID is required for staff accounts.");
+        }
+        if (userRepository.existsByEmployeeId(employeeId)) {
+            throw new RuntimeException("Employee ID already in use.");
+        }
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
@@ -110,6 +184,7 @@ public class UserService {
         user.setRole(request.getRole());
         user.setAuthProvider(AuthProvider.LOCAL);
         user.setEmailVerified(true);
+        user.setEmployeeId(employeeId);
         return convertToDTO(userRepository.save(user));
     }
 }
