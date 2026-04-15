@@ -2,7 +2,6 @@ package com.smartcampus.api.service;
 
 import com.smartcampus.api.dto.LoginRequest;
 import com.smartcampus.api.dto.RegisterRequest;
-import com.smartcampus.api.dto.UserDTO;
 import com.smartcampus.api.model.AuthProvider;
 import com.smartcampus.api.model.Role;
 import com.smartcampus.api.model.User;
@@ -14,6 +13,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.Map;
@@ -29,7 +29,9 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final UserService userService;
 
+    @Transactional
     public void register(RegisterRequest request) {
         Optional<User> existingUserOpt = userRepository.findByEmail(request.getEmail());
 
@@ -111,12 +113,7 @@ public class AuthService {
         response.put("refreshToken", refreshToken);
         response.put("type", "Bearer");
         
-        UserDTO userDTO = new UserDTO(
-                user.getId(), user.getEmail(), user.getName(), user.getPicture(),
-                user.getRole(), user.getAuthProvider(), user.isEmailVerified(),
-                user.getCreatedAt(), user.getUpdatedAt()
-        );
-        response.put("user", userDTO);
+        response.put("user", userService.convertToDTO(user));
 
         return response;
     }
