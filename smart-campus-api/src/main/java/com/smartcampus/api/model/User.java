@@ -22,14 +22,20 @@ public class User {
     
     @Column(unique = true, nullable = false)
     private String email;
-    
+
     private String name;
-    
+
     private String picture;
-    
+
     private String googleId;
-    
+
     private String password;
+
+    @Column(unique = true)
+    private String studentRegistrationNumber;
+
+    @Column(unique = true)
+    private String employeeId;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(255) default 'LOCAL'")

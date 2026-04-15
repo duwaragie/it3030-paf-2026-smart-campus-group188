@@ -46,9 +46,19 @@ public class UserService {
                 user.getRole(),
                 user.getAuthProvider(),
                 user.isEmailVerified(),
+                user.getStudentRegistrationNumber(),
+                user.getEmployeeId(),
+                isProfileComplete(user),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );
+    }
+
+    private boolean isProfileComplete(User user) {
+        if (user.getRole() == Role.STUDENT) {
+            return user.getStudentRegistrationNumber() != null && !user.getStudentRegistrationNumber().isBlank();
+        }
+        return user.getEmployeeId() != null && !user.getEmployeeId().isBlank();
     }
 
     public List<UserDTO> getAllUsers() {
@@ -62,6 +72,27 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id));
         user.setRole(newRole);
+        return convertToDTO(userRepository.save(user));
+    }
+
+    public UserDTO assignIdentifier(Long id, String studentRegistrationNumber, String employeeId) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
+
+        if (studentRegistrationNumber != null && !studentRegistrationNumber.isBlank()) {
+            String srn = studentRegistrationNumber.trim();
+            if (!srn.equals(user.getStudentRegistrationNumber()) && userRepository.existsByStudentRegistrationNumber(srn)) {
+                throw new RuntimeException("Registration number already in use.");
+            }
+            user.setStudentRegistrationNumber(srn);
+        }
+        if (employeeId != null && !employeeId.isBlank()) {
+            String eid = employeeId.trim();
+            if (!eid.equals(user.getEmployeeId()) && userRepository.existsByEmployeeId(eid)) {
+                throw new RuntimeException("Employee ID already in use.");
+            }
+            user.setEmployeeId(eid);
+        }
         return convertToDTO(userRepository.save(user));
     }
 
@@ -79,6 +110,18 @@ public class UserService {
         if (request.getPicture() != null) {
             user.setPicture(request.getPicture());
         }
+
+        // Students may self-assign their registration number (once). Staff cannot self-assign employeeId.
+        if (request.getStudentRegistrationNumber() != null && !request.getStudentRegistrationNumber().isBlank()
+                && user.getRole() == Role.STUDENT
+                && (user.getStudentRegistrationNumber() == null || user.getStudentRegistrationNumber().isBlank())) {
+            String srn = request.getStudentRegistrationNumber().trim();
+            if (userRepository.existsByStudentRegistrationNumber(srn)) {
+                throw new RuntimeException("Registration number already in use.");
+            }
+            user.setStudentRegistrationNumber(srn);
+        }
+
         return convertToDTO(userRepository.save(user));
     }
 

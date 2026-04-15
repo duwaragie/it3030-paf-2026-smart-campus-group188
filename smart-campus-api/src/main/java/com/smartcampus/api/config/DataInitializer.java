@@ -29,6 +29,9 @@ public class DataInitializer implements ApplicationRunner {
     @Value("${app.seed.admin-name}")
     private String adminName;
 
+    @Value("${app.seed.admin-employee-id:EMP-0001}")
+    private String adminEmployeeId;
+
     @Override
     public void run(ApplicationArguments args) {
         if (userRepository.findByEmail(adminEmail).isEmpty()) {
@@ -39,8 +42,9 @@ public class DataInitializer implements ApplicationRunner {
             admin.setRole(Role.ADMIN);
             admin.setAuthProvider(AuthProvider.LOCAL);
             admin.setEmailVerified(true);
+            admin.setEmployeeId(adminEmployeeId);
             userRepository.save(admin);
-            log.info("Seeded admin user: {}", adminEmail);
+            log.info("Seeded admin user: {} (employeeId={})", adminEmail, adminEmployeeId);
         }
     }
 }

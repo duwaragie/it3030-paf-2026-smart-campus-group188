@@ -48,6 +48,15 @@ public class AdminUserController {
         return ResponseEntity.ok(userService.updateRole(id, role));
     }
 
+    // PATCH /api/admin/users/{id}/identifier
+    @PatchMapping("/{id}/identifier")
+    public ResponseEntity<UserDTO> assignIdentifier(
+            @PathVariable Long id,
+            @RequestParam(required = false) String studentRegistrationNumber,
+            @RequestParam(required = false) String employeeId) {
+        return ResponseEntity.ok(userService.assignIdentifier(id, studentRegistrationNumber, employeeId));
+    }
+
     // DELETE /api/admin/users/{id}
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {

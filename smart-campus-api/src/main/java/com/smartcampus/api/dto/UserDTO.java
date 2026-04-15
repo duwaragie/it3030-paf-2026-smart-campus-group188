@@ -19,6 +19,9 @@ public class UserDTO {
     private Role role;
     private AuthProvider authProvider;
     private boolean emailVerified;
+    private String studentRegistrationNumber;
+    private String employeeId;
+    private boolean profileComplete;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
