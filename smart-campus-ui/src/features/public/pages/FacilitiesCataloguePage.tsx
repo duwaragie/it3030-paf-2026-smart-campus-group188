@@ -12,6 +12,12 @@ const typeLabels: Record<string, string> = {
   EQUIPMENT: 'Equipment',
 };
 
+const statusStyle: Record<string, string> = {
+  ACTIVE: 'bg-green-50 text-green-700 border border-green-100',
+  OUT_OF_SERVICE: 'bg-red-50 text-red-700 border border-red-100',
+  UNDER_MAINTENANCE: 'bg-amber-50 text-amber-700 border border-amber-100',
+};
+
 export default function FacilitiesCataloguePage() {
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
