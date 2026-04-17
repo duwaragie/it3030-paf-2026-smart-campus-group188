@@ -27,6 +27,7 @@ public class Resource {
 
     private Integer capacity;
 
+    @Column(length = 255)
     private String location;
 
     @Column(name = "availability_windows")
@@ -35,4 +36,7 @@ public class Resource {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ResourceStatus status;
+
+    @Column(name = "image_url")
+    private String imageUrl;
 }

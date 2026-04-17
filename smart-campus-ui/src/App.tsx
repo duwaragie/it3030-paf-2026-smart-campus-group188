@@ -20,6 +20,7 @@ import AboutPage from './features/landing/pages/AboutPage';
 import ContactPage from './features/landing/pages/ContactPage';
 import ScrollToTop from './components/ScrollToTop';
 import { useAuthStore } from './store/authStore';
+import FacilitiesCataloguePage from './features/public/pages/FacilitiesCataloguePage';
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -73,6 +74,7 @@ function App() {
       {/* Protected routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/facilities" element={<ProtectedRoute><FacilitiesCataloguePage /></ProtectedRoute>} />
 
       {/* Admin routes */}
       <Route path="/admin/users" element={<RoleRoute roles={['ADMIN']}><UsersPage /></RoleRoute>} />
