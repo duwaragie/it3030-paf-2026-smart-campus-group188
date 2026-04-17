@@ -30,8 +30,15 @@ public class ResourceService {
         return resourceRepository.findAll().stream().map(this::convertToDTO).toList();
     }
 
-    public List<ResourceDTO> searchResources(ResourceType type, ResourceStatus status, String location, Integer minCapacity) {
-        return resourceRepository.searchResources(type, status, location, minCapacity)
+    public List<ResourceDTO> searchResources(ResourceType type, ResourceStatus status, String location, Integer minCapacity, List<Long> assetIds, List<Long> amenityIds) {
+        Long assetCount = (assetIds != null && !assetIds.isEmpty()) ? (long) assetIds.size() : null;
+        Long amenityCount = (amenityIds != null && !amenityIds.isEmpty()) ? (long) amenityIds.size() : null;
+        
+        // Handle empty lists by setting them to null so the query condition is ignored
+        List<Long> finalAssetIds = (assetIds != null && assetIds.isEmpty()) ? null : assetIds;
+        List<Long> finalAmenityIds = (amenityIds != null && amenityIds.isEmpty()) ? null : amenityIds;
+        
+        return resourceRepository.searchResources(type, status, location, minCapacity, finalAssetIds, assetCount, finalAmenityIds, amenityCount)
                 .stream().map(this::convertToDTO).toList();
     }
 
