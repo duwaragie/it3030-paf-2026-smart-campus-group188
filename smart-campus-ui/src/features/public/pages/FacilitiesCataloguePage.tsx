@@ -3,6 +3,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { resourceService, type ResourceDTO, type ResourceSearchParams } from '@/services/resourceService';
 import { assetService, type AssetDTO } from '@/services/assetService';
 import { amenityService, type AmenityDTO } from '@/services/amenityService';
+import { locationService, type LocationDTO } from '@/services/locationService';
 import { FacilityDetailModal } from '@/features/facilities/components/FacilityDetailModal';
 
 const TYPES = ['LECTURE_HALL', 'LAB', 'MEETING_ROOM', 'EQUIPMENT'] as const;
@@ -18,6 +19,7 @@ export default function FacilitiesCataloguePage() {
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [availableAssets, setAvailableAssets] = useState<AssetDTO[]>([]);
   const [availableAmenities, setAvailableAmenities] = useState<AmenityDTO[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<LocationDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,12 +55,14 @@ export default function FacilitiesCataloguePage() {
   useEffect(() => {
     const loadCatalogues = async () => {
       try {
-        const [resAssets, resAmenities] = await Promise.all([
+        const [resAssets, resAmenities, resLocations] = await Promise.all([
           assetService.getAll().catch(() => ({ data: [] })),
           amenityService.getAll().catch(() => ({ data: [] })),
+          locationService.getAll().catch(() => ({ data: [] })),
         ]);
         setAvailableAssets(resAssets.data);
         setAvailableAmenities(resAmenities.data);
+        setAvailableLocations(resLocations.data);
       } catch {
         // non-blocking
       }
@@ -67,7 +71,7 @@ export default function FacilitiesCataloguePage() {
   }, []);
 
   const resetFilters = () => setSearchParams({ status: 'ACTIVE' });
-  const hasExtraFilters = (['type', 'location', 'minCapacity', 'assetIds', 'amenityIds'] as const).some(
+  const hasExtraFilters = (['type', 'locationId', 'minCapacity', 'assetIds', 'amenityIds'] as const).some(
     (k) => {
       const v = searchParams[k];
       if (Array.isArray(v)) return v.length > 0;
@@ -126,13 +130,16 @@ export default function FacilitiesCataloguePage() {
             
             <div className="flex-1 min-w-[150px]">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Location</label>
-              <input 
-                type="text"
-                placeholder="e.g. Block A"
-                value={searchParams.location || ''} 
-                onChange={(e) => setSearchParams({...searchParams, location: e.target.value})}
-                className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors placeholder:text-gray-400"
-              />
+              <select
+                  value={searchParams.locationId || ''}
+                  onChange={(e) => setSearchParams({...searchParams, locationId: e.target.value ? Number(e.target.value) : undefined})}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+              >
+                <option value="">All Locations</option>
+                {availableLocations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.displayName}</option>
+                ))}
+              </select>
             </div>
 
             <div className="w-[120px]">
@@ -236,7 +243,7 @@ export default function FacilitiesCataloguePage() {
                       <td className="px-5 py-4 text-sm text-gray-600">
                         {r.capacity ? <span className="font-semibold">{r.capacity} pax</span> : <span className="text-gray-400">—</span>}
                       </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{r.location || '—'}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{r.locationName || '—'}</td>
                       <td className="px-5 py-4 text-sm text-gray-500">{r.availabilityWindows || '—'}</td>
                     </tr>
                   ))}

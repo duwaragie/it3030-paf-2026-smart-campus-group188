@@ -3,7 +3,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { resourceService, type ResourceDTO, type ResourceSearchParams } from '@/services/resourceService';
 import { assetService, type AssetDTO } from '@/services/assetService';
 import { amenityService, type AmenityDTO } from '@/services/amenityService';
-import { storageService } from '@/services/storageService';
+import { locationService, type LocationDTO } from '@/services/locationService';
 import { FacilityDetailModal } from '@/features/facilities/components/FacilityDetailModal';
 import {
   Table,
@@ -34,7 +34,7 @@ type FormState = {
   name: string;
   type: ResourceDTO['type'];
   capacity: string;
-  location: string;
+  locationId: number | '';
   availabilityWindows: string;
   status: ResourceDTO['status'];
   assetIds: number[];
@@ -45,7 +45,7 @@ const emptyForm: FormState = {
   name: '',
   type: 'LAB',
   capacity: '',
-  location: '',
+  locationId: '',
   availabilityWindows: '',
   status: 'ACTIVE',
   assetIds: [],
@@ -58,6 +58,8 @@ export default function FacilitiesPage() {
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [availableAssets, setAvailableAssets] = useState<AssetDTO[]>([]);
   const [availableAmenities, setAvailableAmenities] = useState<AmenityDTO[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<LocationDTO[]>([]);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -74,12 +76,6 @@ export default function FacilitiesPage() {
 
   // Modal State
   const [selectedFacility, setSelectedFacility] = useState<ResourceDTO | null>(null);
-
-  // Image Upload/Paste State
-  const [imageUploadMode, setImageUploadMode] = useState<'upload' | 'url'>('upload');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [pastedImageUrl, setPastedImageUrl] = useState<string>('');
-  const [imagePreviewError, setImagePreviewError] = useState<boolean>(false);
 
   useEffect(() => {
     const run = async () => {
@@ -105,14 +101,16 @@ export default function FacilitiesPage() {
   useEffect(() => {
     const loadCatalogues = async () => {
       try {
-        const [resAssets, resAmenities] = await Promise.all([
+        const [resAssets, resAmenities, resLocations] = await Promise.all([
           assetService.getAll().catch(() => ({ data: [] })),
           amenityService.getAll().catch(() => ({ data: [] })),
+          locationService.getAll().catch(() => ({ data: [] })),
         ]);
         setAvailableAssets(resAssets.data);
         setAvailableAmenities(resAmenities.data);
+        setAvailableLocations(resLocations.data);
       } catch {
-        // non-blocking — form still works without catalogues
+        // non-blocking
       }
     };
     void loadCatalogues();
@@ -126,12 +124,8 @@ export default function FacilitiesPage() {
     setForm(emptyForm);
     setFormErrors({});
     setEditingId(null);
-    setImageFile(null);
-    setPastedImageUrl('');
-    setImageUploadMode('upload');
-    setImagePreviewError(false);
     setShowForm(true);
-    setSelectedFacility(null); // Close modal if open
+    setSelectedFacility(null);
     clearMessages();
   };
 
@@ -140,7 +134,7 @@ export default function FacilitiesPage() {
       name: r.name,
       type: r.type,
       capacity: r.capacity?.toString() || '',
-      location: r.location || '',
+      locationId: r.locationId || '',
       availabilityWindows: r.availabilityWindows || '',
       status: r.status,
       assetIds: r.assetIds || [],
@@ -148,21 +142,8 @@ export default function FacilitiesPage() {
     });
     setFormErrors({});
     setEditingId(r.id);
-    
-    // Set up image state based on existing URL
-    setImageFile(null);
-    setImagePreviewError(false);
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    if (r.imageUrl && supabaseUrl && !r.imageUrl.startsWith(supabaseUrl)) {
-      setImageUploadMode('url');
-      setPastedImageUrl(r.imageUrl);
-    } else {
-      setImageUploadMode('upload');
-      setPastedImageUrl('');
-    }
-
     setShowForm(true);
-    setSelectedFacility(null); // Close modal to show form
+    setSelectedFacility(null);
     clearMessages();
   };
 
@@ -191,7 +172,7 @@ export default function FacilitiesPage() {
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
     if (!form.name.trim()) errors.name = 'Name is required';
-    if (!form.location.trim()) errors.location = 'Location is required';
+    if (form.locationId === '') errors.locationId = 'Location is required';
     if (form.capacity && (isNaN(parseInt(form.capacity)) || parseInt(form.capacity) < 1)) {
       errors.capacity = 'Capacity must be a positive number';
     }
@@ -206,28 +187,15 @@ export default function FacilitiesPage() {
       setSaving(true);
       clearMessages();
 
-      let finalImageUrl: string | undefined = editingId ? resources.find(r => r.id === editingId)?.imageUrl : undefined;
-
-      if (imageUploadMode === 'upload' && imageFile) {
-        finalImageUrl = await storageService.upload(imageFile, 'resources');
-      } else if (imageUploadMode === 'url' && pastedImageUrl.trim() !== '') {
-        finalImageUrl = pastedImageUrl.trim();
-      } else if (imageUploadMode === 'upload' && !imageFile && !editingId) {
-        finalImageUrl = undefined;
-      } else if (imageUploadMode === 'url' && pastedImageUrl.trim() === '') {
-        finalImageUrl = undefined;
-      }
-
       const payload = {
         name: form.name.trim(),
         type: form.type,
         capacity: form.capacity ? parseInt(form.capacity) : null,
-        location: form.location.trim(),
+        locationId: form.locationId !== '' ? Number(form.locationId) : null,
         availabilityWindows: form.availabilityWindows.trim(),
         status: form.status,
         assetIds: form.assetIds,
         amenityIds: form.amenityIds,
-        imageUrl: finalImageUrl,
       };
 
       if (editingId) {
@@ -253,12 +221,6 @@ export default function FacilitiesPage() {
     try {
       setDeleting(true);
       clearMessages();
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-      if (resourceToDelete.imageUrl && supabaseUrl && resourceToDelete.imageUrl.startsWith(supabaseUrl)) {
-        await storageService.remove(resourceToDelete.imageUrl);
-      }
-
       await resourceService.delete(resourceToDelete.id);
       setResources((prev) => prev.filter((r) => r.id !== resourceToDelete.id));
       setSuccess(`"${resourceToDelete.name}" has been deleted.`);
@@ -325,13 +287,16 @@ export default function FacilitiesPage() {
 
               <div className="flex-1 min-w-[150px]">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Location</label>
-                <input
-                    type="text"
-                    placeholder="e.g. Block A"
-                    value={searchParams.location || ''}
-                    onChange={(e) => setSearchParams({...searchParams, location: e.target.value})}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors placeholder:text-gray-400"
-                />
+                <select
+                    value={searchParams.locationId || ''}
+                    onChange={(e) => setSearchParams({...searchParams, locationId: e.target.value ? Number(e.target.value) : undefined})}
+                    className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+                >
+                  <option value="">All Locations</option>
+                  {availableLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.displayName}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="w-[120px]">
@@ -374,6 +339,7 @@ export default function FacilitiesPage() {
                       />
                       {formErrors.name && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.name}</p>}
                     </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Type <span className="text-red-400">*</span></label>
@@ -394,26 +360,32 @@ export default function FacilitiesPage() {
                         {formErrors.capacity && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.capacity}</p>}
                       </div>
                     </div>
+
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Location <span className="text-red-400">*</span></label>
-                      <input
-                          value={form.location}
-                          onChange={(e) => { setForm({ ...form, location: e.target.value }); setFormErrors({ ...formErrors, location: undefined }); }}
-                          placeholder="e.g. Block A, Floor 1"
-                          className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.location ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
-                      />
-                      {formErrors.location && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.location}</p>}
+                      <select
+                          value={form.locationId}
+                          onChange={(e) => { setForm({ ...form, locationId: e.target.value ? Number(e.target.value) : '' }); setFormErrors({ ...formErrors, locationId: undefined }); }}
+                          className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.locationId ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
+                      >
+                        <option value="" disabled>Select a location</option>
+                        {availableLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>{loc.displayName}</option>
+                        ))}
+                      </select>
+                      {formErrors.locationId && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.locationId}</p>}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Availability Windows</label>
-                      <input
-                          value={form.availabilityWindows}
-                          onChange={(e) => setForm({ ...form, availabilityWindows: e.target.value })}
-                          placeholder="e.g. Mon-Fri 08:00-18:00"
-                          className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
-                      />
-                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Availability Windows</label>
+                        <input
+                            value={form.availabilityWindows}
+                            onChange={(e) => setForm({ ...form, availabilityWindows: e.target.value })}
+                            placeholder="e.g. Mon-Fri 08:00-18:00"
+                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+                        />
+                      </div>
                       <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Status <span className="text-red-400">*</span></label>
                         <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
@@ -423,77 +395,8 @@ export default function FacilitiesPage() {
                     </div>
                   </div>
 
-                  {/* Right Column: Assets, Amenities, and Image Upload */}
+                  {/* Right Column: Assets and Amenities */}
                   <div className="space-y-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    
-                    {/* Image Upload/Paste Section */}
-                    <div>
-                      <label className="text-sm font-semibold text-gray-800 mb-3 block">Facility Image</label>
-                      <div className="flex items-center gap-4 mb-3">
-                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                          <input 
-                            type="radio" 
-                            name="imageMode" 
-                            className="text-campus-600 focus:ring-campus-500"
-                            checked={imageUploadMode === 'upload'}
-                            onChange={() => setImageUploadMode('upload')}
-                          />
-                          Upload file
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                          <input 
-                            type="radio" 
-                            name="imageMode" 
-                            className="text-campus-600 focus:ring-campus-500"
-                            checked={imageUploadMode === 'url'}
-                            onChange={() => setImageUploadMode('url')}
-                          />
-                          Paste image URL
-                        </label>
-                      </div>
-
-                      {imageUploadMode === 'upload' ? (
-                        <input
-                          type="file"
-                          accept="image/png, image/jpeg"
-                          onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
-                          className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-white file:text-campus-700 file:border-gray-200 file:border hover:file:bg-gray-50 cursor-pointer"
-                        />
-                      ) : (
-                        <div className="flex gap-3 items-center">
-                          <div className="flex-1">
-                            <input
-                              type="url"
-                              value={pastedImageUrl}
-                              onChange={(e) => {
-                                setPastedImageUrl(e.target.value);
-                                setImagePreviewError(false);
-                              }}
-                              placeholder="https://example.com/image.jpg"
-                              className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
-                            />
-                          </div>
-                          {pastedImageUrl && !imagePreviewError && (
-                            <img 
-                              src={pastedImageUrl} 
-                              alt="Preview" 
-                              className="w-10 h-10 object-cover rounded-lg border border-gray-200 shrink-0"
-                              onError={() => setImagePreviewError(true)}
-                            />
-                          )}
-                          {pastedImageUrl && imagePreviewError && (
-                            <div className="w-10 h-10 bg-red-50 rounded-lg border border-red-200 flex items-center justify-center shrink-0" title="Invalid image URL">
-                              <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <hr className="border-gray-200" />
-
                     <div>
                       <label className="text-sm font-semibold text-gray-800 mb-3 block">Included Assets</label>
                       {availableAssets.length > 0 ? (
@@ -591,7 +494,7 @@ export default function FacilitiesPage() {
                           <td className="px-5 py-4 text-sm text-gray-600">
                             {r.capacity ? <span className="font-semibold">{r.capacity} pax</span> : <span className="text-gray-400">—</span>}
                           </td>
-                          <td className="px-5 py-4 text-sm text-gray-600">{r.location || '—'}</td>
+                          <td className="px-5 py-4 text-sm text-gray-600">{r.locationName || '—'}</td>
                           <td className="px-5 py-4 text-sm text-gray-500">{r.availabilityWindows || '—'}</td>
                           <td className="px-5 py-4">
                             <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${statusStyle[r.status]}`}>
