@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AppLayout from '@/components/layout/AppLayout';
 import { notificationService, type NotificationDTO } from '@/services/notificationService';
+import { notificationSocket } from '@/lib/notificationSocket';
 
 const priorityBadge: Record<string, string> = {
   HIGH: 'bg-red-100 text-red-700',
@@ -17,6 +18,16 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     void load();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = notificationSocket.subscribe((incoming) => {
+      setItems((prev) => {
+        if (prev.some((x) => x.id === incoming.id)) return prev;
+        return [incoming, ...prev];
+      });
+    });
+    return unsubscribe;
   }, []);
 
   const load = async () => {

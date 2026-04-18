@@ -1,7 +1,9 @@
 package com.smartcampus.api.controller;
 
 import com.smartcampus.api.dto.NotificationDTO;
+import com.smartcampus.api.dto.NotificationPreferenceDTO;
 import com.smartcampus.api.model.User;
+import com.smartcampus.api.service.NotificationPreferenceService;
 import com.smartcampus.api.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import java.util.Map;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationPreferenceService preferenceService;
 
     // GET /api/notifications/me?limit=50
     @GetMapping("/me")
@@ -59,5 +62,21 @@ public class NotificationController {
         User user = (User) authentication.getPrincipal();
         notificationService.delete(user.getId(), id);
         return ResponseEntity.noContent().build();
+    }
+
+    // GET /api/notifications/preferences — global channel toggles (email, push)
+    @GetMapping("/preferences")
+    public ResponseEntity<NotificationPreferenceDTO> getPreferences(Authentication authentication) {
+        User user = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(preferenceService.getForUser(user.getId()));
+    }
+
+    // PUT /api/notifications/preferences — update email and/or push
+    @PutMapping("/preferences")
+    public ResponseEntity<NotificationPreferenceDTO> updatePreferences(
+            Authentication authentication,
+            @RequestBody NotificationPreferenceDTO request) {
+        User user = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(preferenceService.update(user.getId(), request));
     }
 }

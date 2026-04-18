@@ -79,6 +79,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/refresh-token").permitAll()
                         .requestMatchers("/api/contact").permitAll()
                         .requestMatchers("/oauth2/**", "/login/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll()

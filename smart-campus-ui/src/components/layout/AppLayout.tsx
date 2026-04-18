@@ -52,17 +52,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <Link to="/" className="inline-flex hover:opacity-90 transition-opacity">
               <Logo variant="dark" size="sm" />
             </Link>
-            <nav className="hidden md:flex items-center gap-1">
-              {['Dashboard', 'Courses', 'Research', 'Campus'].map((item, i) => (
-                <Link
-                  key={item}
-                  to={i === 0 ? '/dashboard' : '#'}
-                  className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors ${i === 0 ? 'text-campus-800 bg-campus-50 font-semibold' : 'text-gray-500 hover:text-campus-700 hover:bg-gray-50'}`}
-                >
-                  {item}
-                </Link>
-              ))}
-            </nav>
           </div>
           <div className="flex items-center gap-4">
             <NotificationBell />
@@ -122,21 +111,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         {/* Sidebar */}
         <aside className="hidden lg:flex w-[220px] flex-col bg-white border-r border-gray-200 h-[calc(100vh-64px)] sticky top-16 overflow-y-auto">
           <div className="p-4">
-            <div className="flex items-center gap-3 p-3 bg-campus-50 rounded-xl mb-6">
-              <div className="w-10 h-10 rounded-full bg-campus-600 text-white flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="8.5" cy="7" r="4" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-[10px] text-campus-500 font-semibold uppercase tracking-wider">Current Status</p>
-                <p className="text-sm font-bold text-campus-800">
-                  Active {user?.role === 'STUDENT' ? 'Student' : user?.role === 'LECTURER' ? 'Faculty' : 'Admin'}
-                </p>
-              </div>
-            </div>
-
             <nav className="space-y-1">
               {visibleNav.map((item) => (
                 <Link

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { notificationSocket } from '@/lib/notificationSocket';
 import LoginPage from './features/auth/pages/LoginPage';
 import RegisterPage from './features/auth/pages/RegisterPage';
 import VerifyOtpPage from './features/auth/pages/VerifyOtpPage';
@@ -59,6 +60,17 @@ function RoleRoute({ children, roles }: { children: React.ReactElement; roles: s
 }
 
 function App() {
+  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      notificationSocket.connect(token);
+      return () => notificationSocket.disconnect();
+    }
+    notificationSocket.disconnect();
+  }, [isAuthenticated, token]);
+
   return (
     <>
     <ScrollToTop />

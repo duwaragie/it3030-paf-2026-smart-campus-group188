@@ -7,6 +7,8 @@ import com.smartcampus.api.model.NotificationPriority;
 import com.smartcampus.api.model.NotificationType;
 import com.smartcampus.api.model.User;
 import com.smartcampus.api.repository.NotificationRepository;
+import com.smartcampus.api.service.notification.NotificationDispatcher;
+import com.smartcampus.api.service.notification.NotificationRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -23,40 +25,27 @@ import java.util.List;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
-    private final EmailService emailService;
+    private final NotificationDispatcher dispatcher;
 
     /**
-     * Persist a notification for a recipient and, for HIGH priority, dispatch an email.
-     * Designed to be called from any service that raises events (enrollment, grades, etc.).
+     * Facade over {@link NotificationDispatcher}. Existing call sites keep working;
+     * the actual routing (in-app / email / push) happens inside the dispatcher
+     * based on the recipient's preferences.
      */
-    @Transactional
-    public Notification notify(User recipient,
-                               NotificationType type,
-                               NotificationPriority priority,
-                               String title,
-                               String message,
-                               String link) {
-        Notification notification = Notification.builder()
+    public void notify(User recipient,
+                       NotificationType type,
+                       NotificationPriority priority,
+                       String title,
+                       String message,
+                       String link) {
+        dispatcher.dispatch(NotificationRequest.builder()
                 .recipient(recipient)
                 .type(type)
                 .priority(priority)
                 .title(title)
                 .message(message)
                 .link(link)
-                .read(false)
-                .build();
-        notification = notificationRepository.save(notification);
-
-        if (priority == NotificationPriority.HIGH && recipient.getEmail() != null) {
-            try {
-                emailService.sendNotificationEmail(recipient.getEmail(),
-                        recipient.getName(), title, message, link);
-            } catch (Exception e) {
-                log.warn("Notification email failed for {}: {}", recipient.getEmail(), e.getMessage());
-            }
-        }
-
-        return notification;
+                .build());
     }
 
     public List<NotificationDTO> listForUser(Long userId, int limit) {

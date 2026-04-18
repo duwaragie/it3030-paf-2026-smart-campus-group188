@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { notificationService, type NotificationDTO } from '@/services/notificationService';
+import { notificationSocket } from '@/lib/notificationSocket';
 
 const priorityAccent: Record<string, string> = {
   HIGH: 'bg-red-500',
@@ -29,8 +30,22 @@ export default function NotificationBell() {
 
   useEffect(() => {
     void refreshCount();
-    const interval = setInterval(() => void refreshCount(), 30_000);
+    // WebSocket is the primary source of truth — poll every 2 minutes as a safety net
+    // for missed frames (reconnects, transient network blips).
+    const interval = setInterval(() => void refreshCount(), 120_000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Live updates over WebSocket — prepend to the open dropdown and bump the badge.
+  useEffect(() => {
+    const unsubscribe = notificationSocket.subscribe((incoming) => {
+      setUnread((prev) => prev + 1);
+      setItems((prev) => {
+        if (prev.some((x) => x.id === incoming.id)) return prev;
+        return [incoming, ...prev].slice(0, 10);
+      });
+    });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
