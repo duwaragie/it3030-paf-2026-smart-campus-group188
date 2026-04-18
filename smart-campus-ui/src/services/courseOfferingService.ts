@@ -1,4 +1,5 @@
 import { api } from '@/lib/axios';
+import type { CourseSectionDTO } from '@/services/courseSectionService';
 
 export type CourseOfferingStatus = 'DRAFT' | 'OPEN' | 'CLOSED' | 'ARCHIVED';
 
@@ -9,13 +10,12 @@ export interface CourseOfferingDTO {
   description?: string | null;
   semester: string;
   credits: number;
-  capacity: number;
-  enrolledCount: number;
-  seatsAvailable: number;
-  lecturerId?: number | null;
-  lecturerName?: string | null;
   prerequisites?: string | null;
   status: CourseOfferingStatus;
+  sections: CourseSectionDTO[];
+  totalCapacity: number;
+  totalEnrolled: number;
+  lecturerNames?: string | null;
 }
 
 export interface CreateCourseOfferingPayload {
@@ -24,8 +24,6 @@ export interface CreateCourseOfferingPayload {
   description?: string;
   semester: string;
   credits: number;
-  capacity: number;
-  lecturerId?: number | null;
   prerequisites?: string;
   status?: CourseOfferingStatus;
 }

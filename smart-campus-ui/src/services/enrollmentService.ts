@@ -28,10 +28,17 @@ export const GRADE_OPTIONS: { value: Grade; label: string; points: number | null
 
 export interface EnrollmentDTO {
   id: number;
+
   studentId: number;
   studentName: string;
   studentEmail: string;
   studentRegistrationNumber?: string | null;
+
+  sectionId: number;
+  sectionLabel: string;
+  sectionCapacity: number;
+  lecturerId?: number | null;
+  lecturerName?: string | null;
 
   offeringId: number;
   courseCode: string;
@@ -61,15 +68,15 @@ export interface TranscriptDTO {
 }
 
 export const enrollmentService = {
-  enroll: (courseOfferingId: number) =>
-    api.post<EnrollmentDTO>('/enrollments', { courseOfferingId }),
+  enroll: (sectionId: number) =>
+    api.post<EnrollmentDTO>('/enrollments', { sectionId }),
 
   withdraw: (id: number) => api.delete<EnrollmentDTO>(`/enrollments/${id}`),
 
   listMine: () => api.get<EnrollmentDTO[]>('/enrollments/me'),
 
-  roster: (offeringId: number) =>
-    api.get<EnrollmentDTO[]>(`/enrollments/course/${offeringId}`),
+  roster: (sectionId: number) =>
+    api.get<EnrollmentDTO[]>(`/enrollments/section/${sectionId}`),
 
   setGrade: (enrollmentId: number, grade: Grade) =>
     api.put<EnrollmentDTO>(`/enrollments/${enrollmentId}/grade`, { grade }),

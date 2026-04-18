@@ -61,7 +61,24 @@ export default function TranscriptPage() {
         ) : transcript && (
           <>
             {/* Summary */}
-            <div className="bg-gradient-to-br from-campus-800 to-campus-900 text-white rounded-2xl p-6 grid grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-campus-800 to-campus-900 text-white rounded-2xl p-6 grid grid-cols-3 gap-6 relative group">
+              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="relative">
+                  <button
+                    aria-label="How GPA is calculated"
+                    className="w-5 h-5 rounded-full bg-white/10 text-white text-[10px] font-bold flex items-center justify-center hover:bg-white/20"
+                  >
+                    ?
+                  </button>
+                  <div className="absolute right-0 top-6 w-64 hidden group-hover:block bg-white text-campus-900 text-[11px] rounded-lg shadow-lg p-3 leading-relaxed z-10">
+                    <p className="font-bold mb-1">GPA = Σ(credits × grade points) / Σ(credits)</p>
+                    <p className="text-gray-500">
+                      Only courses marked COMPLETED with a released letter grade are counted.
+                      &quot;I&quot; (Incomplete) and &quot;W&quot; (Withdrawn) grades are excluded.
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Cumulative GPA</p>
                 <p className="text-4xl font-extrabold mt-1 tracking-tight">
@@ -117,21 +134,26 @@ export default function TranscriptPage() {
                         <th className="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Credits</th>
                         <th className="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</th>
                         <th className="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</th>
-                        <th className="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">GP</th>
+                        <th className="px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">GPA</th>
                       </tr>
                     </thead>
                     <tbody>
                       {bySemester[sem].map((e) => (
                         <tr key={e.id} className="border-b border-gray-50 last:border-0">
                           <td className="px-5 py-3 text-sm font-mono font-semibold text-campus-700">{e.courseCode}</td>
-                          <td className="px-5 py-3 text-sm text-campus-800">{e.courseTitle}</td>
+                          <td className="px-5 py-3">
+                            <p className="text-sm text-campus-800">{e.courseTitle}</p>
+                            <p className="text-[11px] text-gray-400">
+                              Section {e.sectionLabel}{e.lecturerName ? ` · ${e.lecturerName}` : ''}
+                            </p>
+                          </td>
                           <td className="px-5 py-3 text-sm text-gray-600">{e.credits}</td>
                           <td className="px-5 py-3 text-xs text-gray-500">{e.status}</td>
                           <td className={`px-5 py-3 text-sm font-bold ${gradeStyle(e.gradeLabel)}`}>
-                            {e.gradeReleased && e.gradeLabel ? e.gradeLabel : '—'}
+                            {e.gradeReleased && e.gradeLabel ? e.gradeLabel : ''}
                           </td>
                           <td className="px-5 py-3 text-sm text-gray-600">
-                            {e.gradeReleased && e.gradePoints != null ? e.gradePoints.toFixed(1) : '—'}
+                            {e.gradeReleased && e.gradePoints != null ? e.gradePoints.toFixed(1) : ''}
                           </td>
                         </tr>
                       ))}
