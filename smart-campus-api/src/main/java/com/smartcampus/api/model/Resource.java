@@ -29,8 +29,9 @@ public class Resource {
 
     private Integer capacity;
 
-    @Column(length = 255)
-    private String location;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "location_id")
+    private Location location;
 
     @Column(name = "availability_windows")
     private String availabilityWindows;

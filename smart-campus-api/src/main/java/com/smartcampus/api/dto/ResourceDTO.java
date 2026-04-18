@@ -24,7 +24,9 @@ public class ResourceDTO {
 
     private Integer capacity;
 
-    private String location;
+    private Long locationId;
+
+    private String locationName; // Added for display purposes in tables
 
     private String availabilityWindows;
 
