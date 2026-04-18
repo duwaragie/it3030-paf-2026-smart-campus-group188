@@ -2,6 +2,7 @@ import React from 'react';
 import { type ResourceDTO } from '@/services/resourceService';
 import { type AssetDTO } from '@/services/assetService';
 import { type AmenityDTO } from '@/services/amenityService';
+import { formatAvailabilitySummary } from '@/utils/scheduleUtils';
 
 interface FacilityDetailModalProps {
   isOpen: boolean;
@@ -88,7 +89,7 @@ export function FacilityDetailModal({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Location</p>
-                  <p className="text-sm text-gray-700">{resource.location || 'Not specified'}</p>
+                  <p className="text-sm text-gray-700">{resource.locationName || 'Not specified'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Capacity</p>
@@ -98,11 +99,11 @@ export function FacilityDetailModal({
 
               <div>
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Availability</p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <div className="inline-flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100 max-w-full">
+                  <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-sm text-gray-700">{resource.availabilityWindows || 'Standard campus hours'}</span>
+                  <span className="text-xs text-gray-700 whitespace-pre-wrap">{formatAvailabilitySummary(resource.availabilities)}</span>
                 </div>
               </div>
             </div>

@@ -5,6 +5,15 @@ import { assetService, type AssetDTO } from '@/services/assetService';
 import { amenityService, type AmenityDTO } from '@/services/amenityService';
 import { locationService, type LocationDTO } from '@/services/locationService';
 import { FacilityDetailModal } from '@/features/facilities/components/FacilityDetailModal';
+import { formatAvailabilitySummary } from '@/utils/scheduleUtils';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const TYPES = ['LECTURE_HALL', 'LAB', 'MEETING_ROOM', 'EQUIPMENT'] as const;
 
@@ -217,17 +226,19 @@ export default function FacilitiesCataloguePage() {
             <div className="w-10 h-10 border-[3px] border-gray-200 border-t-campus-600 rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm animate-slide-up">
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50">
+              <Table>
+                <TableHeader className="bg-gray-50/50 rounded-t-2xl">
+                  <TableRow className="border-b border-gray-100 hover:bg-transparent">
                     {['Name', 'Type', 'Capacity', 'Location', 'Availability'].map((h) => (
-                      <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider h-auto">
+                        {h}
+                      </th>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {resources.map((r) => (
                     <tr 
                       key={r.id} 
@@ -244,12 +255,14 @@ export default function FacilitiesCataloguePage() {
                         {r.capacity ? <span className="font-semibold">{r.capacity} pax</span> : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-5 py-4 text-sm text-gray-600">{r.locationName || '—'}</td>
-                      <td className="px-5 py-4 text-sm text-gray-500">{r.availabilityWindows || '—'}</td>
+                      <td className="px-5 py-4 text-[11px] text-gray-600 whitespace-pre-wrap max-w-[200px]">
+                        {formatAvailabilitySummary(r.availabilities)}
+                      </td>
                     </tr>
                   ))}
                   {resources.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-16 text-center">
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={5} className="px-5 py-16 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3 border border-gray-100">
                             <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" /></svg>
@@ -257,11 +270,11 @@ export default function FacilitiesCataloguePage() {
                           <p className="text-sm font-semibold text-gray-900 mb-1">No facilities found</p>
                           <p className="text-xs text-gray-500">Adjust your search filters to find resources.</p>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             {resources.length > 0 && (
               <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">

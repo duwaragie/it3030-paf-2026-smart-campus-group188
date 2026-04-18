@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
-import { resourceService, type ResourceDTO, type ResourceSearchParams } from '@/services/resourceService';
+import { resourceService, type ResourceDTO, type ResourceSearchParams, type ResourceAvailabilityDTO, type DayOfWeek } from '@/services/resourceService';
 import { assetService, type AssetDTO } from '@/services/assetService';
 import { amenityService, type AmenityDTO } from '@/services/amenityService';
-import { locationService, type LocationDTO } from '@/services/locationService';
+import { storageService } from '@/services/storageService';
 import { FacilityDetailModal } from '@/features/facilities/components/FacilityDetailModal';
+import { formatAvailabilitySummary } from '@/utils/scheduleUtils';
 import {
   Table,
   TableBody,
@@ -16,6 +17,10 @@ import {
 
 const TYPES = ['LECTURE_HALL', 'LAB', 'MEETING_ROOM', 'EQUIPMENT'] as const;
 const STATUSES = ['ACTIVE', 'OUT_OF_SERVICE', 'UNDER_MAINTENANCE'] as const;
+const DAYS: DayOfWeek[] = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+const DAY_LABELS: Record<DayOfWeek, string> = {
+  MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu', FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun'
+};
 
 const typeLabels: Record<string, string> = {
   LECTURE_HALL: 'Lecture Hall',
@@ -35,21 +40,26 @@ type FormState = {
   type: ResourceDTO['type'];
   capacity: string;
   locationId: number | '';
-  availabilityWindows: string;
   status: ResourceDTO['status'];
   assetIds: number[];
   amenityIds: number[];
+  availabilities: Partial<Record<DayOfWeek, { enabled: boolean; startTime: string; endTime: string }>>;
 };
+
+const defaultAvailabilities: FormState['availabilities'] = {};
+DAYS.forEach(day => {
+  defaultAvailabilities[day] = { enabled: false, startTime: '08:00', endTime: '18:00' };
+});
 
 const emptyForm: FormState = {
   name: '',
   type: 'LAB',
   capacity: '',
   locationId: '',
-  availabilityWindows: '',
   status: 'ACTIVE',
   assetIds: [],
   amenityIds: [],
+  availabilities: JSON.parse(JSON.stringify(defaultAvailabilities)),
 };
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
@@ -58,8 +68,6 @@ export default function FacilitiesPage() {
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [availableAssets, setAvailableAssets] = useState<AssetDTO[]>([]);
   const [availableAmenities, setAvailableAmenities] = useState<AmenityDTO[]>([]);
-  const [availableLocations, setAvailableLocations] = useState<LocationDTO[]>([]);
-  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -71,11 +79,15 @@ export default function FacilitiesPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<ResourceDTO | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
+  
   // Modal State
   const [selectedFacility, setSelectedFacility] = useState<ResourceDTO | null>(null);
+
+  // Image Upload/Paste State
+  const [imageUploadMode, setImageUploadMode] = useState<'upload' | 'url'>('upload');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [pastedImageUrl, setPastedImageUrl] = useState<string>('');
+  const [imagePreviewError, setImagePreviewError] = useState<boolean>(false);
 
   useEffect(() => {
     const run = async () => {
@@ -101,14 +113,12 @@ export default function FacilitiesPage() {
   useEffect(() => {
     const loadCatalogues = async () => {
       try {
-        const [resAssets, resAmenities, resLocations] = await Promise.all([
+        const [resAssets, resAmenities] = await Promise.all([
           assetService.getAll().catch(() => ({ data: [] })),
           amenityService.getAll().catch(() => ({ data: [] })),
-          locationService.getAll().catch(() => ({ data: [] })),
         ]);
         setAvailableAssets(resAssets.data);
         setAvailableAmenities(resAmenities.data);
-        setAvailableLocations(resLocations.data);
       } catch {
         // non-blocking
       }
@@ -121,27 +131,55 @@ export default function FacilitiesPage() {
   const clearMessages = () => { setError(null); setSuccess(null); };
 
   const openCreate = () => {
-    setForm(emptyForm);
+    setForm(JSON.parse(JSON.stringify(emptyForm)));
     setFormErrors({});
     setEditingId(null);
+    setImageFile(null);
+    setPastedImageUrl('');
+    setImageUploadMode('upload');
+    setImagePreviewError(false);
     setShowForm(true);
     setSelectedFacility(null);
     clearMessages();
   };
 
   const openEdit = (r: ResourceDTO) => {
+    // Reconstruct availabilities for form state
+    const editAvail: FormState['availabilities'] = JSON.parse(JSON.stringify(defaultAvailabilities));
+    if (r.availabilities) {
+      r.availabilities.forEach(a => {
+        editAvail[a.dayOfWeek] = {
+          enabled: true,
+          startTime: a.startTime.substring(0, 5), // strip seconds if any
+          endTime: a.endTime.substring(0, 5),
+        };
+      });
+    }
+
     setForm({
       name: r.name,
       type: r.type,
       capacity: r.capacity?.toString() || '',
       locationId: r.locationId || '',
-      availabilityWindows: r.availabilityWindows || '',
       status: r.status,
       assetIds: r.assetIds || [],
       amenityIds: r.amenityIds || [],
+      availabilities: editAvail,
     });
     setFormErrors({});
     setEditingId(r.id);
+    
+    setImageFile(null);
+    setImagePreviewError(false);
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    if (r.imageUrl && supabaseUrl && !r.imageUrl.startsWith(supabaseUrl)) {
+      setImageUploadMode('url');
+      setPastedImageUrl(r.imageUrl);
+    } else {
+      setImageUploadMode('upload');
+      setPastedImageUrl('');
+    }
+
     setShowForm(true);
     setSelectedFacility(null);
     clearMessages();
@@ -169,6 +207,32 @@ export default function FacilitiesPage() {
     }));
   };
 
+  const updateAvailability = (day: DayOfWeek, field: 'enabled' | 'startTime' | 'endTime', value: boolean | string) => {
+    setForm(prev => ({
+      ...prev,
+      availabilities: {
+        ...prev.availabilities,
+        [day]: {
+          ...prev.availabilities[day],
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const copyToAllWeekdays = () => {
+    const monday = form.availabilities['MONDAY'];
+    if (!monday) return;
+    
+    setForm(prev => {
+      const newAvail = { ...prev.availabilities };
+      ['TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'].forEach(day => {
+        newAvail[day as DayOfWeek] = { ...monday };
+      });
+      return { ...prev, availabilities: newAvail };
+    });
+  };
+
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
     if (!form.name.trim()) errors.name = 'Name is required';
@@ -187,15 +251,41 @@ export default function FacilitiesPage() {
       setSaving(true);
       clearMessages();
 
-      const payload = {
+      let finalImageUrl: string | undefined = editingId ? resources.find(r => r.id === editingId)?.imageUrl : undefined;
+
+      if (imageUploadMode === 'upload' && imageFile) {
+        finalImageUrl = await storageService.upload(imageFile, 'resources');
+      } else if (imageUploadMode === 'url' && pastedImageUrl.trim() !== '') {
+        finalImageUrl = pastedImageUrl.trim();
+      } else if (imageUploadMode === 'upload' && !imageFile && !editingId) {
+        finalImageUrl = undefined;
+      } else if (imageUploadMode === 'url' && pastedImageUrl.trim() === '') {
+        finalImageUrl = undefined;
+      }
+
+      // Convert form availabilities to DTO array
+      const availabilitiesList: ResourceAvailabilityDTO[] = [];
+      DAYS.forEach(day => {
+        const a = form.availabilities[day];
+        if (a && a.enabled) {
+          availabilitiesList.push({
+            dayOfWeek: day,
+            startTime: a.startTime + ':00', // add seconds for backend LocalTime
+            endTime: a.endTime + ':00'
+          });
+        }
+      });
+
+      const payload: any = {
         name: form.name.trim(),
         type: form.type,
         capacity: form.capacity ? parseInt(form.capacity) : null,
         locationId: form.locationId !== '' ? Number(form.locationId) : null,
-        availabilityWindows: form.availabilityWindows.trim(),
         status: form.status,
         assetIds: form.assetIds,
         amenityIds: form.amenityIds,
+        imageUrl: finalImageUrl,
+        availabilities: availabilitiesList,
       };
 
       if (editingId) {
@@ -221,6 +311,12 @@ export default function FacilitiesPage() {
     try {
       setDeleting(true);
       clearMessages();
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      if (resourceToDelete.imageUrl && supabaseUrl && resourceToDelete.imageUrl.startsWith(supabaseUrl)) {
+        await storageService.remove(resourceToDelete.imageUrl);
+      }
+
       await resourceService.delete(resourceToDelete.id);
       setResources((prev) => prev.filter((r) => r.id !== resourceToDelete.id));
       setSuccess(`"${resourceToDelete.name}" has been deleted.`);
@@ -285,20 +381,6 @@ export default function FacilitiesPage() {
                 </select>
               </div>
 
-              <div className="flex-1 min-w-[150px]">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Location</label>
-                <select
-                    value={searchParams.locationId || ''}
-                    onChange={(e) => setSearchParams({...searchParams, locationId: e.target.value ? Number(e.target.value) : undefined})}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
-                >
-                  <option value="">All Locations</option>
-                  {availableLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.displayName}</option>
-                  ))}
-                </select>
-              </div>
-
               <div className="w-[120px]">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Min. Capacity</label>
                 <input
@@ -328,6 +410,7 @@ export default function FacilitiesPage() {
                 <h2 className="text-lg font-bold text-campus-900">{editingId ? 'Edit Facility' : 'Add New Facility'}</h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                  {/* Left Column */}
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Name <span className="text-red-400">*</span></label>
@@ -339,7 +422,6 @@ export default function FacilitiesPage() {
                       />
                       {formErrors.name && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.name}</p>}
                     </div>
-                    
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Type <span className="text-red-400">*</span></label>
@@ -360,54 +442,147 @@ export default function FacilitiesPage() {
                         {formErrors.capacity && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.capacity}</p>}
                       </div>
                     </div>
-
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Location <span className="text-red-400">*</span></label>
-                      <select
-                          value={form.locationId}
-                          onChange={(e) => { setForm({ ...form, locationId: e.target.value ? Number(e.target.value) : '' }); setFormErrors({ ...formErrors, locationId: undefined }); }}
-                          className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.locationId ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
-                      >
-                        <option value="" disabled>Select a location</option>
-                        {availableLocations.map((loc) => (
-                          <option key={loc.id} value={loc.id}>{loc.displayName}</option>
-                        ))}
-                      </select>
-                      {formErrors.locationId && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.locationId}</p>}
-                    </div>
-
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-1 block">Availability Windows</label>
-                        <input
-                            value={form.availabilityWindows}
-                            onChange={(e) => setForm({ ...form, availabilityWindows: e.target.value })}
-                            placeholder="e.g. Mon-Fri 08:00-18:00"
-                            className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
-                        />
-                      </div>
                       <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Status <span className="text-red-400">*</span></label>
                         <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
                           {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                         </select>
                       </div>
+                      {/* Image Upload/Paste Section moved here */}
+                      <div>
+                        <label className="text-sm font-semibold text-gray-800 mb-1 block">Facility Image</label>
+                        <div className="flex items-center gap-4 mb-2">
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-700">
+                            <input 
+                              type="radio" 
+                              name="imageMode" 
+                              className="text-campus-600 focus:ring-campus-500"
+                              checked={imageUploadMode === 'upload'}
+                              onChange={() => setImageUploadMode('upload')}
+                            />
+                            Upload file
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-700">
+                            <input 
+                              type="radio" 
+                              name="imageMode" 
+                              className="text-campus-600 focus:ring-campus-500"
+                              checked={imageUploadMode === 'url'}
+                              onChange={() => setImageUploadMode('url')}
+                            />
+                            Paste URL
+                          </label>
+                        </div>
+
+                        {imageUploadMode === 'upload' ? (
+                          <input
+                            type="file"
+                            accept="image/png, image/jpeg"
+                            onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
+                            className="w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-white file:text-campus-700 file:border-gray-200 file:border hover:file:bg-gray-50 cursor-pointer"
+                          />
+                        ) : (
+                          <div className="flex gap-2 items-center">
+                            <div className="flex-1">
+                              <input
+                                type="url"
+                                value={pastedImageUrl}
+                                onChange={(e) => {
+                                  setPastedImageUrl(e.target.value);
+                                  setImagePreviewError(false);
+                                }}
+                                placeholder="https://..."
+                                className="w-full h-8 px-2 rounded-lg border border-gray-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+                              />
+                            </div>
+                            {pastedImageUrl && !imagePreviewError && (
+                              <img 
+                                src={pastedImageUrl} 
+                                alt="Preview" 
+                                className="w-8 h-8 object-cover rounded-md border border-gray-200 shrink-0"
+                                onError={() => setImagePreviewError(true)}
+                              />
+                            )}
+                            {pastedImageUrl && imagePreviewError && (
+                              <div className="w-8 h-8 bg-red-50 rounded-md border border-red-200 flex items-center justify-center shrink-0" title="Invalid image URL">
+                                <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Column: Assets and Amenities */}
-                  <div className="space-y-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                  {/* Right Column: Schedule */}
+                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-sm font-semibold text-gray-800">Weekly Schedule</label>
+                      <button 
+                        type="button" 
+                        onClick={copyToAllWeekdays}
+                        className="text-[10px] px-2 py-1 bg-white border border-gray-200 rounded text-gray-600 hover:bg-gray-50 hover:text-campus-700 transition-colors shadow-sm"
+                        title="Copy Monday's schedule to all weekdays"
+                      >
+                        Copy Mon to Mon-Fri
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {DAYS.map(day => {
+                        const dayData = form.availabilities[day];
+                        return (
+                          <div key={day} className="flex items-center justify-between gap-3 bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
+                            <label className="flex items-center gap-2 cursor-pointer min-w-[70px]">
+                              <input 
+                                type="checkbox" 
+                                className="rounded text-campus-600 focus:ring-campus-500"
+                                checked={dayData?.enabled || false}
+                                onChange={(e) => updateAvailability(day, 'enabled', e.target.checked)}
+                              />
+                              <span className="text-xs font-semibold text-gray-700">{DAY_LABELS[day]}</span>
+                            </label>
+                            {dayData?.enabled ? (
+                              <div className="flex items-center gap-1.5 flex-1">
+                                <input 
+                                  type="time" 
+                                  value={dayData.startTime}
+                                  onChange={(e) => updateAvailability(day, 'startTime', e.target.value)}
+                                  className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-campus-200"
+                                  required={dayData.enabled}
+                                />
+                                <span className="text-gray-400 text-[10px]">to</span>
+                                <input 
+                                  type="time" 
+                                  value={dayData.endTime}
+                                  onChange={(e) => updateAvailability(day, 'endTime', e.target.value)}
+                                  className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-campus-200"
+                                  required={dayData.enabled}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex-1 flex items-center justify-center text-[10px] text-gray-400 italic bg-gray-50 rounded h-8 border border-transparent">
+                                Closed
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bottom Row: Assets and Amenities */}
+                  <div className="sm:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
                     <div>
                       <label className="text-sm font-semibold text-gray-800 mb-3 block">Included Assets</label>
                       {availableAssets.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                           {availableAssets.map((a) => (
-                            <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
-                              <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.assetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
-                              <div>
-                                <p className="text-sm font-medium text-gray-700">{a.name}</p>
-                                {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
-                              </div>
+                            <label key={a.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium cursor-pointer transition-colors ${form.assetIds.includes(a.id) ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                              <input type="checkbox" className="sr-only" checked={form.assetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
+                              {a.name}
                             </label>
                           ))}
                         </div>
@@ -419,14 +594,11 @@ export default function FacilitiesPage() {
                     <div>
                       <label className="text-sm font-semibold text-gray-800 mb-3 block">Included Amenities</label>
                       {availableAmenities.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                           {availableAmenities.map((a) => (
-                            <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
-                              <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.amenityIds.includes(a.id)} onChange={() => toggleAmenity(a.id)} />
-                              <div>
-                                <p className="text-sm font-medium text-gray-700">{a.name}</p>
-                                {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
-                              </div>
+                            <label key={a.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium cursor-pointer transition-colors ${form.amenityIds.includes(a.id) ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                              <input type="checkbox" className="sr-only" checked={form.amenityIds.includes(a.id)} onChange={() => toggleAmenity(a.id)} />
+                              {a.name}
                             </label>
                           ))}
                         </div>
@@ -453,12 +625,12 @@ export default function FacilitiesPage() {
                 <div className="w-10 h-10 border-[3px] border-gray-200 border-t-campus-600 rounded-full animate-spin" />
               </div>
           ) : (
-              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm animate-slide-up">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/50">
-                      {['Name', 'Type', 'Features', 'Capacity', 'Location', 'Availability', 'Status'].map((h) => (
+                      {['Name', 'Type', 'Features', 'Capacity', 'Availability', 'Status'].map((h) => (
                           <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -494,8 +666,9 @@ export default function FacilitiesPage() {
                           <td className="px-5 py-4 text-sm text-gray-600">
                             {r.capacity ? <span className="font-semibold">{r.capacity} pax</span> : <span className="text-gray-400">—</span>}
                           </td>
-                          <td className="px-5 py-4 text-sm text-gray-600">{r.locationName || '—'}</td>
-                          <td className="px-5 py-4 text-sm text-gray-500">{r.availabilityWindows || '—'}</td>
+                          <td className="px-5 py-4 text-[11px] text-gray-600 whitespace-pre-wrap max-w-[200px]">
+                            {formatAvailabilitySummary(r.availabilities)}
+                          </td>
                           <td className="px-5 py-4">
                             <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${statusStyle[r.status]}`}>
                               {r.status.replace(/_/g, ' ')}
@@ -505,7 +678,7 @@ export default function FacilitiesPage() {
                     ))}
                     {resources.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-5 py-16 text-center">
+                          <td colSpan={6} className="px-5 py-16 text-center">
                             <div className="flex flex-col items-center justify-center">
                               <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3 border border-gray-100">
                                 <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" /></svg>
