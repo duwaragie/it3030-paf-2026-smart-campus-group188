@@ -14,7 +14,6 @@ import RegisterUserPage from './features/admin/pages/RegisterUserPage';
 import FacilitiesPage from './features/admin/pages/FacilitiesPage';
 import AssetsAdminPage from './features/admin/pages/AssetsAdminPage';
 import AmenitiesAdminPage from './features/admin/pages/AmenitiesAdminPage';
-import BookingsPage from './features/admin/pages/BookingsPage';
 import IncidentsPage from './features/admin/pages/IncidentsPage';
 import NotificationsPage from './features/admin/pages/NotificationsPage';
 import LandingPage from './features/landing/pages/LandingPage';
@@ -23,6 +22,7 @@ import ContactPage from './features/landing/pages/ContactPage';
 import ScrollToTop from './components/ScrollToTop';
 import { useAuthStore } from './store/authStore';
 import FacilitiesCataloguePage from './features/public/pages/FacilitiesCataloguePage';
+import { BookingPage, AdminBookingPage } from './features/booking';
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -77,6 +77,7 @@ function App() {
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/facilities" element={<ProtectedRoute><FacilitiesCataloguePage /></ProtectedRoute>} />
+      <Route path="/bookings" element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
 
       {/* Admin routes */}
       <Route path="/admin/users" element={<RoleRoute roles={['ADMIN']}><UsersPage /></RoleRoute>} />
@@ -84,7 +85,7 @@ function App() {
       <Route path="/admin/facilities" element={<RoleRoute roles={['ADMIN']}><FacilitiesPage /></RoleRoute>} />
       <Route path="/admin/assets" element={<RoleRoute roles={['ADMIN']}><AssetsAdminPage /></RoleRoute>} />
       <Route path="/admin/amenities" element={<RoleRoute roles={['ADMIN']}><AmenitiesAdminPage /></RoleRoute>} />
-      <Route path="/admin/bookings" element={<RoleRoute roles={['ADMIN']}><BookingsPage /></RoleRoute>} />
+      <Route path="/admin/bookings" element={<RoleRoute roles={['ADMIN']}><AdminBookingPage /></RoleRoute>} />
       <Route path="/admin/incidents" element={<RoleRoute roles={['ADMIN']}><IncidentsPage /></RoleRoute>} />
       <Route path="/admin/notifications" element={<RoleRoute roles={['ADMIN']}><NotificationsPage /></RoleRoute>} />
 
