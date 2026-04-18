@@ -91,7 +91,10 @@ export default function FacilitiesPage() {
         setIsLoading(true);
         setError(null);
         const cleanParams = Object.fromEntries(
-            Object.entries(searchParams).filter(([, v]) => v !== '' && v != null)
+            Object.entries(searchParams).filter(([, v]) => {
+              if (Array.isArray(v)) return v.length > 0;
+              return v !== '' && v != null;
+            })
         );
         const res = Object.keys(cleanParams).length > 0
             ? await resourceService.search(cleanParams)
@@ -125,6 +128,31 @@ export default function FacilitiesPage() {
   }, []);
 
   const resetFilters = () => setSearchParams({});
+
+  const toggleAssetFilter = (id: number) => {
+    setSearchParams((prev) => {
+      const current = prev.assetIds || [];
+      return {
+        ...prev,
+        assetIds: current.includes(id) ? current.filter((a) => a !== id) : [...current, id],
+      };
+    });
+  };
+
+  const toggleAmenityFilter = (id: number) => {
+    setSearchParams((prev) => {
+      const current = prev.amenityIds || [];
+      return {
+        ...prev,
+        amenityIds: current.includes(id) ? current.filter((a) => a !== id) : [...current, id],
+      };
+    });
+  };
+
+  const hasActiveFilters = Object.values(searchParams).some((v) => {
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== '' && v != null;
+  });
 
   const clearMessages = () => { setError(null); setSuccess(null); };
 
@@ -379,6 +407,20 @@ export default function FacilitiesPage() {
                 </select>
               </div>
 
+              <div className="flex-1 min-w-[150px]">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Location</label>
+                <select
+                    value={searchParams.locationId || ''}
+                    onChange={(e) => setSearchParams({...searchParams, locationId: e.target.value ? Number(e.target.value) : undefined})}
+                    className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+                >
+                  <option value="">All Locations</option>
+                  {availableLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.displayName}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="w-[120px]">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Min. Capacity</label>
                 <input
@@ -391,7 +433,7 @@ export default function FacilitiesPage() {
                 />
               </div>
 
-              {Object.values(searchParams).some((v) => v !== '' && v != null) && (
+              {hasActiveFilters && (
                   <button
                       type="button"
                       onClick={resetFilters}
@@ -401,6 +443,52 @@ export default function FacilitiesPage() {
                   </button>
               )}
             </form>
+
+            {(availableAssets.length > 0 || availableAmenities.length > 0) && (
+                <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                  {availableAssets.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assets</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availableAssets.map((a) => {
+                            const active = (searchParams.assetIds || []).includes(a.id);
+                            return (
+                                <button
+                                    key={a.id}
+                                    type="button"
+                                    onClick={() => toggleAssetFilter(a.id)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-blue-50 hover:border-blue-200'}`}
+                                >
+                                  {a.name}
+                                </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                  )}
+
+                  {availableAmenities.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Amenities</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availableAmenities.map((a) => {
+                            const active = (searchParams.amenityIds || []).includes(a.id);
+                            return (
+                                <button
+                                    key={a.id}
+                                    type="button"
+                                    onClick={() => toggleAmenityFilter(a.id)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${active ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-purple-50 hover:border-purple-200'}`}
+                                >
+                                  {a.name}
+                                </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                  )}
+                </div>
+            )}
           </div>
 
           {showForm && (
@@ -648,9 +736,15 @@ export default function FacilitiesPage() {
                     </tr>
                     </thead>
                     <tbody>
-                    {resources.map((r) => (
-                        <tr 
-                          key={r.id} 
+                    {resources.map((r) => {
+                      const rAssets = availableAssets.filter((a) => r.assetIds?.includes(a.id));
+                      const rAmenities = availableAmenities.filter((a) => r.amenityIds?.includes(a.id));
+                      const chips = [...rAssets, ...rAmenities];
+                      const visibleChips = chips.slice(0, 3);
+                      const extraCount = chips.length - visibleChips.length;
+                      return (
+                        <tr
+                          key={r.id}
                           onClick={() => handleRowClick(r)}
                           className="border-b border-gray-50 hover:bg-campus-50/50 transition-colors cursor-pointer group"
                         >
@@ -663,17 +757,28 @@ export default function FacilitiesPage() {
                             </span>
                           </td>
                           <td className="px-5 py-4">
-                            <div className="flex flex-wrap gap-1.5 max-w-[180px]">
-                              {r.assetIds && r.assetIds.length > 0 && (
-                                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded">{r.assetIds.length} Assets</span>
-                              )}
-                              {r.amenityIds && r.amenityIds.length > 0 && (
-                                <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold rounded">{r.amenityIds.length} Amenities</span>
-                              )}
-                              {(!r.assetIds?.length && !r.amenityIds?.length) && (
-                                <span className="text-[11px] text-gray-400 italic">—</span>
-                              )}
-                            </div>
+                            {chips.length === 0 ? (
+                              <span className="text-[11px] text-gray-400 italic">—</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                {visibleChips.map((c) => {
+                                  const isAsset = rAssets.some((a) => a.id === c.id);
+                                  return (
+                                    <span
+                                      key={`${isAsset ? 'a' : 'm'}-${c.id}`}
+                                      className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${isAsset ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-purple-50 text-purple-700 border-purple-100'}`}
+                                    >
+                                      {c.name}
+                                    </span>
+                                  );
+                                })}
+                                {extraCount > 0 && (
+                                  <span className="px-2 py-0.5 text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded-full">
+                                    +{extraCount}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-600">
                             {r.capacity ? <span className="font-semibold">{r.capacity} pax</span> : <span className="text-gray-400">—</span>}
@@ -687,7 +792,8 @@ export default function FacilitiesPage() {
                             </span>
                           </td>
                         </tr>
-                    ))}
+                      );
+                    })}
                     {resources.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-5 py-16 text-center">
