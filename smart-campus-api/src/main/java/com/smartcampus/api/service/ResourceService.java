@@ -1,8 +1,10 @@
 package com.smartcampus.api.service;
 
+import com.smartcampus.api.dto.ResourceAvailabilityDTO;
 import com.smartcampus.api.dto.ResourceDTO;
 import com.smartcampus.api.exception.ResourceNotFoundException;
 import com.smartcampus.api.model.Resource;
+import com.smartcampus.api.model.ResourceAvailability;
 import com.smartcampus.api.model.ResourceStatus;
 import com.smartcampus.api.model.ResourceType;
 import com.smartcampus.api.model.Asset;
@@ -62,7 +64,6 @@ public class ResourceService {
         resource.setName(dto.getName());
         resource.setType(dto.getType());
         resource.setCapacity(dto.getCapacity());
-        resource.setAvailabilityWindows(dto.getAvailabilityWindows());
         resource.setStatus(dto.getStatus());
         resource.setImageUrl(dto.getImageUrl());
         
@@ -73,6 +74,7 @@ public class ResourceService {
         }
         
         mapIdsToEntities(dto, resource);
+        mapAvailabilities(dto, resource);
         
         return convertToDTO(resourceRepository.save(resource));
     }
@@ -84,7 +86,6 @@ public class ResourceService {
         resource.setName(dto.getName());
         resource.setType(dto.getType());
         resource.setCapacity(dto.getCapacity());
-        resource.setAvailabilityWindows(dto.getAvailabilityWindows());
         resource.setStatus(dto.getStatus());
         resource.setImageUrl(dto.getImageUrl());
         
@@ -97,6 +98,7 @@ public class ResourceService {
         }
         
         mapIdsToEntities(dto, resource);
+        mapAvailabilities(dto, resource);
         
         return convertToDTO(resourceRepository.save(resource));
     }
@@ -131,6 +133,21 @@ public class ResourceService {
         }
     }
 
+    private void mapAvailabilities(ResourceDTO dto, Resource resource) {
+        resource.getAvailabilities().clear();
+        if (dto.getAvailabilities() != null) {
+            List<ResourceAvailability> availabilities = dto.getAvailabilities().stream()
+                    .map(aDto -> ResourceAvailability.builder()
+                            .resource(resource)
+                            .dayOfWeek(aDto.getDayOfWeek())
+                            .startTime(aDto.getStartTime())
+                            .endTime(aDto.getEndTime())
+                            .build())
+                    .toList();
+            resource.getAvailabilities().addAll(availabilities);
+        }
+    }
+
     private ResourceDTO convertToDTO(Resource resource) {
         List<Long> assetIds = resource.getAssets() != null 
             ? resource.getAssets().stream().map(Asset::getId).toList() 
@@ -140,6 +157,10 @@ public class ResourceService {
             ? resource.getAmenities().stream().map(Amenity::getId).toList() 
             : new ArrayList<>();
 
+        List<ResourceAvailabilityDTO> availabilityDTOs = resource.getAvailabilities() != null
+            ? resource.getAvailabilities().stream().map(a -> new ResourceAvailabilityDTO(a.getId(), resource.getId(), a.getDayOfWeek(), a.getStartTime(), a.getEndTime())).toList()
+            : new ArrayList<>();
+
         return new ResourceDTO(
                 resource.getId(),
                 resource.getName(),
@@ -147,11 +168,12 @@ public class ResourceService {
                 resource.getCapacity(),
                 resource.getLocation() != null ? resource.getLocation().getId() : null,
                 resource.getLocation() != null ? resource.getLocation().getDisplayName() : null,
-                resource.getAvailabilityWindows(),
+                null, // Deprecated availabilityWindows string
                 resource.getStatus(),
                 resource.getImageUrl(),
                 assetIds,
-                amenityIds
+                amenityIds,
+                availabilityDTOs
         );
     }
 }

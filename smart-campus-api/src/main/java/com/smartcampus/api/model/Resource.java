@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
 
 @Data
 @Builder
@@ -33,9 +35,6 @@ public class Resource {
     @JoinColumn(name = "location_id")
     private Location location;
 
-    @Column(name = "availability_windows")
-    private String availabilityWindows;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ResourceStatus status;
@@ -60,4 +59,8 @@ public class Resource {
     )
     @Builder.Default
     private Set<Amenity> amenities = new HashSet<>();
+
+    @OneToMany(mappedBy = "resource", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<ResourceAvailability> availabilities = new ArrayList<>();
 }
