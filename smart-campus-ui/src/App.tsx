@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { notificationSocket } from '@/lib/notificationSocket';
+import { registerServiceWorker } from '@/lib/push';
 import LoginPage from './features/auth/pages/LoginPage';
 import RegisterPage from './features/auth/pages/RegisterPage';
 import VerifyOtpPage from './features/auth/pages/VerifyOtpPage';
@@ -62,6 +63,12 @@ function RoleRoute({ children, roles }: { children: React.ReactElement; roles: s
 function App() {
   const token = useAuthStore((state) => state.token);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  useEffect(() => {
+    // Register the push service worker once on app load — subscription flow
+    // is kicked off later from the preferences toggle.
+    void registerServiceWorker();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && token) {

@@ -3,6 +3,7 @@ import {
   notificationService,
   type NotificationPreferenceDTO,
 } from '@/services/notificationService';
+import { disablePush, enablePush, getCurrentState, pushSupported, type PushState } from '@/lib/push';
 
 type Channel = {
   key: 'inApp' | 'email' | 'push';
@@ -30,11 +31,19 @@ const CHANNELS: Channel[] = [
   },
 ];
 
+function pushStatusText(state: PushState, pushPrefOn: boolean): string | null {
+  if (state === 'unsupported') return 'Your browser doesn\'t support push notifications.';
+  if (state === 'denied') return 'Notifications are blocked in your browser settings.';
+  if (pushPrefOn && state === 'granted-unsubscribed') return 'Subscription lost — toggle off and back on to re-subscribe.';
+  return null;
+}
+
 export default function NotificationPreferencesCard() {
   const [prefs, setPrefs] = useState<NotificationPreferenceDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<'email' | 'push' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pushState, setPushState] = useState<PushState>('default');
 
   useEffect(() => {
     notificationService
@@ -42,22 +51,62 @@ export default function NotificationPreferencesCard() {
       .then((res) => setPrefs(res.data))
       .catch(() => setError('Failed to load preferences.'))
       .finally(() => setLoading(false));
+
+    if (pushSupported()) {
+      void getCurrentState().then(setPushState);
+    } else {
+      setPushState('unsupported');
+    }
   }, []);
 
-  const toggle = async (key: 'email' | 'push') => {
+  const toggleEmail = async () => {
     if (!prefs) return;
-    const next = { ...prefs, [key]: !prefs[key] };
-    setSaving(key);
-    setPrefs(next);
+    const next = !prefs.email;
+    setSaving('email');
+    setPrefs({ ...prefs, email: next });
     try {
-      await notificationService.updatePreferences({ [key]: next[key] });
+      await notificationService.updatePreferences({ email: next });
     } catch {
-      setPrefs(prefs); // revert
+      setPrefs({ ...prefs });
       setError('Failed to save preference.');
     } finally {
       setSaving(null);
     }
   };
+
+  const togglePush = async () => {
+    if (!prefs) return;
+    const turningOn = !prefs.push;
+    setSaving('push');
+    setError(null);
+
+    try {
+      if (turningOn) {
+        const newState = await enablePush();
+        setPushState(newState);
+        if (newState !== 'granted-subscribed') {
+          // Permission denied or unsupported — keep the preference off.
+          if (newState === 'denied') setError('Browser push is blocked. Enable it in site settings to subscribe.');
+          else if (newState === 'unsupported') setError('This browser doesn\'t support push notifications.');
+          return;
+        }
+        setPrefs({ ...prefs, push: true });
+        await notificationService.updatePreferences({ push: true });
+      } else {
+        const newState = await disablePush();
+        setPushState(newState);
+        setPrefs({ ...prefs, push: false });
+        await notificationService.updatePreferences({ push: false });
+      }
+    } catch {
+      setError('Failed to update push subscription.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const statusMsg = prefs ? pushStatusText(pushState, prefs.push) : null;
+  const pushDisabled = pushState === 'unsupported' || pushState === 'denied';
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-6">
@@ -81,8 +130,15 @@ export default function NotificationPreferencesCard() {
       ) : (
         <div className="divide-y divide-gray-50">
           {CHANNELS.map((ch) => {
+            const isPush = ch.key === 'push';
             const on = ch.lockedOn ? true : prefs[ch.key as 'email' | 'push'];
             const isSaving = saving === ch.key;
+            const disabled = ch.lockedOn || isSaving || (isPush && pushDisabled);
+            const onChange = () => {
+              if (ch.lockedOn || isSaving) return;
+              if (ch.key === 'email') void toggleEmail();
+              else if (ch.key === 'push') void togglePush();
+            };
             return (
               <div key={ch.key} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div className="flex-1 min-w-0">
@@ -95,17 +151,20 @@ export default function NotificationPreferencesCard() {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">{ch.description}</p>
+                  {isPush && statusMsg && (
+                    <p className="text-[11px] text-amber-600 mt-1 font-medium">{statusMsg}</p>
+                  )}
                 </div>
                 <label
                   className={`shrink-0 inline-flex items-center gap-2 ${
-                    ch.lockedOn ? 'cursor-not-allowed' : 'cursor-pointer'
+                    disabled ? 'cursor-not-allowed' : 'cursor-pointer'
                   } ${isSaving ? 'opacity-60' : ''}`}
                 >
                   <input
                     type="checkbox"
                     checked={on}
-                    disabled={ch.lockedOn || isSaving}
-                    onChange={() => !ch.lockedOn && toggle(ch.key as 'email' | 'push')}
+                    disabled={disabled}
+                    onChange={onChange}
                     className="w-5 h-5 rounded border-gray-300 text-campus-600 focus:ring-campus-500 focus:ring-offset-0 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
                   />
                   <span className={`text-xs font-semibold ${on ? 'text-campus-800' : 'text-gray-400'}`}>
