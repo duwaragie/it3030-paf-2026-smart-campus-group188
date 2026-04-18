@@ -3,6 +3,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { resourceService, type ResourceDTO, type ResourceSearchParams } from '@/services/resourceService';
 import { assetService, type AssetDTO } from '@/services/assetService';
 import { amenityService, type AmenityDTO } from '@/services/amenityService';
+import { storageService } from '@/services/storageService';
 
 const TYPES = ['LECTURE_HALL', 'LAB', 'MEETING_ROOM', 'EQUIPMENT'] as const;
 const STATUSES = ['ACTIVE', 'OUT_OF_SERVICE', 'UNDER_MAINTENANCE'] as const;
@@ -53,14 +54,17 @@ export default function FacilitiesPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [searchParams, setSearchParams] = useState<ResourceSearchParams>({});
+  const [isSearching, setIsSearching] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<ResourceDTO | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -107,6 +111,7 @@ export default function FacilitiesPage() {
     setForm(emptyForm);
     setFormErrors({});
     setEditingId(null);
+    setImageFile(null);
     setShowForm(true);
     clearMessages();
   };
@@ -124,6 +129,7 @@ export default function FacilitiesPage() {
     });
     setFormErrors({});
     setEditingId(r.id);
+    setImageFile(null);
     setShowForm(true);
     clearMessages();
   };
@@ -163,6 +169,13 @@ export default function FacilitiesPage() {
     try {
       setSaving(true);
       clearMessages();
+
+      let imageUrl: string | undefined = editingId ? resources.find(r => r.id === editingId)?.imageUrl : undefined;
+
+      if (imageFile) {
+        imageUrl = await storageService.upload(imageFile, 'resources');
+      }
+
       const payload = {
         name: form.name.trim(),
         type: form.type,
@@ -172,7 +185,9 @@ export default function FacilitiesPage() {
         status: form.status,
         assetIds: form.assetIds,
         amenityIds: form.amenityIds,
+        imageUrl: imageUrl,
       };
+
       if (editingId) {
         const res = await resourceService.update(editingId, payload);
         setResources((prev) => prev.map((r) => r.id === editingId ? res.data : r));
@@ -197,6 +212,11 @@ export default function FacilitiesPage() {
     try {
       setDeleting(true);
       clearMessages();
+
+      if (deleteConfirm.imageUrl) {
+        await storageService.remove(deleteConfirm.imageUrl);
+      }
+
       await resourceService.delete(deleteConfirm.id);
       setResources((prev) => prev.filter((r) => r.id !== deleteConfirm.id));
       setSuccess(`"${deleteConfirm.name}" has been deleted.`);
@@ -237,7 +257,7 @@ export default function FacilitiesPage() {
 
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-            <div className="flex flex-wrap items-end gap-4">
+            <form onSubmit={(e) => { e.preventDefault(); /* handled by effect */ }} className="flex flex-wrap items-end gap-4">
               <div className="flex-1 min-w-[150px]">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Type</label>
                 <select
@@ -294,7 +314,7 @@ export default function FacilitiesPage() {
                     Reset
                   </button>
               )}
-            </div>
+            </form>
           </div>
 
           {/* Delete Confirmation Modal */}
@@ -338,107 +358,123 @@ export default function FacilitiesPage() {
           {showForm && (
               <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4 shadow-soft animate-slide-up">
                 <h2 className="text-lg font-bold text-campus-900">{editingId ? 'Edit Facility' : 'Add New Facility'}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Name <span className="text-red-400">*</span></label>
-                    <input
-                        value={form.name}
-                        onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormErrors({ ...formErrors, name: undefined }); }}
-                        placeholder="e.g. Computer Lab 101"
-                        className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.name ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
-                    />
-                    {formErrors.name && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.name}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Name <span className="text-red-400">*</span></label>
+                      <input
+                          value={form.name}
+                          onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormErrors({ ...formErrors, name: undefined }); }}
+                          placeholder="e.g. Computer Lab 101"
+                          className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.name ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
+                      />
+                      {formErrors.name && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.name}</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Type <span className="text-red-400">*</span></label>
+                        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as FormState['type'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
+                          {TYPES.map((t) => <option key={t} value={t}>{typeLabels[t]}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Capacity</label>
+                        <input
+                            type="number"
+                            min="1"
+                            value={form.capacity}
+                            onChange={(e) => { setForm({ ...form, capacity: e.target.value }); setFormErrors({ ...formErrors, capacity: undefined }); }}
+                            placeholder="e.g. 30"
+                            className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.capacity ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
+                        />
+                        {formErrors.capacity && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.capacity}</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Location <span className="text-red-400">*</span></label>
+                      <input
+                          value={form.location}
+                          onChange={(e) => { setForm({ ...form, location: e.target.value }); setFormErrors({ ...formErrors, location: undefined }); }}
+                          placeholder="e.g. Block A, Floor 1"
+                          className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.location ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
+                      />
+                      {formErrors.location && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.location}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Availability Windows</label>
+                      <input
+                          value={form.availabilityWindows}
+                          onChange={(e) => setForm({ ...form, availabilityWindows: e.target.value })}
+                          placeholder="e.g. Mon-Fri 08:00-18:00"
+                          className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Status <span className="text-red-400">*</span></label>
+                        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
+                          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Facility Image</label>
+                        <input
+                          type="file"
+                          accept="image/png, image/jpeg"
+                          onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
+                          className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-campus-50 file:text-campus-700 hover:file:bg-campus-100 cursor-pointer pt-1"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Type <span className="text-red-400">*</span></label>
-                    <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as FormState['type'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
-                      {TYPES.map((t) => <option key={t} value={t}>{typeLabels[t]}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Capacity</label>
-                    <input
-                        type="number"
-                        min="1"
-                        value={form.capacity}
-                        onChange={(e) => { setForm({ ...form, capacity: e.target.value }); setFormErrors({ ...formErrors, capacity: undefined }); }}
-                        placeholder="e.g. 30"
-                        className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.capacity ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
-                    />
-                    {formErrors.capacity && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.capacity}</p>}
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Location <span className="text-red-400">*</span></label>
-                    <input
-                        value={form.location}
-                        onChange={(e) => { setForm({ ...form, location: e.target.value }); setFormErrors({ ...formErrors, location: undefined }); }}
-                        placeholder="e.g. Block A, Floor 1"
-                        className={`w-full h-11 px-4 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors ${formErrors.location ? 'border-red-300 bg-red-50/30' : 'border-gray-200 bg-gray-50/50 focus:bg-white'}`}
-                    />
-                    {formErrors.location && <p className="text-xs text-red-500 mt-1 font-medium">{formErrors.location}</p>}
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Availability Windows</label>
-                    <input
-                        value={form.availabilityWindows}
-                        onChange={(e) => setForm({ ...form, availabilityWindows: e.target.value })}
-                        placeholder="e.g. Mon-Fri 08:00-18:00"
-                        className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Status <span className="text-red-400">*</span></label>
-                    <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FormState['status'] })} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 transition-colors">
-                      {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                    </select>
+
+                  {/* Right Column: Assets and Amenities */}
+                  <div className="space-y-6 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                    <div>
+                      <label className="text-sm font-semibold text-gray-800 mb-3 block">Included Assets</label>
+                      {availableAssets.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                          {availableAssets.map((a) => (
+                            <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
+                              <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.assetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
+                              <div>
+                                <p className="text-sm font-medium text-gray-700">{a.name}</p>
+                                {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">No assets in the catalogue. Add them in Manage Assets first.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-semibold text-gray-800 mb-3 block">Included Amenities</label>
+                      {availableAmenities.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                          {availableAmenities.map((a) => (
+                            <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
+                              <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.amenityIds.includes(a.id)} onChange={() => toggleAmenity(a.id)} />
+                              <div>
+                                <p className="text-sm font-medium text-gray-700">{a.name}</p>
+                                {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">No amenities in the catalogue. Add them in Manage Amenities first.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <label className="text-sm font-semibold text-gray-800 mb-3 block">Assets</label>
-                    {availableAssets.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                        {availableAssets.map((a) => (
-                          <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
-                            <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.assetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
-                            <div>
-                              <p className="text-sm font-medium text-gray-700">{a.name}</p>
-                              {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400 italic">No assets in the catalogue. Add them in Manage Assets first.</p>
-                    )}
-                  </div>
-
-                  <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                    <label className="text-sm font-semibold text-gray-800 mb-3 block">Amenities</label>
-                    {availableAmenities.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                        {availableAmenities.map((a) => (
-                          <label key={a.id} className="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white transition-colors border border-transparent hover:border-gray-200">
-                            <input type="checkbox" className="mt-1 rounded text-campus-600 focus:ring-campus-500" checked={form.amenityIds.includes(a.id)} onChange={() => toggleAmenity(a.id)} />
-                            <div>
-                              <p className="text-sm font-medium text-gray-700">{a.name}</p>
-                              {a.description && <p className="text-[10px] text-gray-400 truncate w-32" title={a.description}>{a.description}</p>}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400 italic">No amenities in the catalogue. Add them in Manage Amenities first.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button type="submit" disabled={saving} className="h-11 px-6 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 disabled:opacity-60 transition-colors">
+                <div className="flex gap-3 pt-4 border-t border-gray-100">
+                  <button type="submit" disabled={saving} className="h-11 px-8 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 disabled:opacity-60 transition-colors">
                     {saving ? 'Saving...' : editingId ? 'Update Facility' : 'Create Facility'}
                   </button>
-                  <button type="button" onClick={() => { setShowForm(false); setFormErrors({}); }} className="h-11 px-6 border border-gray-200 text-sm font-semibold text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+                  <button type="button" onClick={() => { setShowForm(false); setFormErrors({}); }} className="h-11 px-8 border border-gray-200 text-sm font-semibold text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
                     Cancel
                   </button>
                 </div>
@@ -455,7 +491,7 @@ export default function FacilitiesPage() {
                   <table className="w-full text-left">
                     <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/50">
-                      {['Name', 'Type', 'Features', 'Capacity', 'Location', 'Availability', 'Status', 'Actions'].map((h) => (
+                      {['Image', 'ID', 'Name', 'Features', 'Capacity', 'Location', 'Availability', 'Status', 'Actions'].map((h) => (
                           <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -463,11 +499,17 @@ export default function FacilitiesPage() {
                     <tbody>
                     {resources.map((r) => (
                         <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
-                          <td className="px-5 py-4 text-sm font-semibold text-campus-800">{r.name}</td>
-                          <td className="px-5 py-4 text-sm text-gray-600">
-                        <span className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-xs font-medium text-gray-600">
-                          {typeLabels[r.type] || r.type}
-                        </span>
+                          <td className="px-5 py-4">
+                            {r.imageUrl ? (
+                              <img src={r.imageUrl} alt={r.name} className="w-10 h-10 object-cover rounded-lg border border-gray-100 shadow-sm" />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center text-[10px] text-gray-400 font-medium border border-gray-100">N/A</div>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-sm font-mono text-gray-500">#{r.id}</td>
+                          <td className="px-5 py-4 text-sm font-semibold text-campus-800">
+                            {r.name}
+                            <div className="text-[11px] text-gray-400 mt-0.5">{typeLabels[r.type] || r.type}</div>
                           </td>
                           <td className="px-5 py-4">
                             <div className="flex flex-wrap gap-1.5 max-w-[180px]">
@@ -493,7 +535,7 @@ export default function FacilitiesPage() {
                         </span>
                           </td>
                           <td className="px-5 py-4">
-                            <div className="flex gap-3">
+                            <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button onClick={() => openEdit(r)} className="text-sm font-semibold text-campus-600 hover:text-campus-800 transition-colors">Edit</button>
                               <button onClick={() => setDeleteConfirm(r)} className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors">Delete</button>
                             </div>
@@ -502,7 +544,7 @@ export default function FacilitiesPage() {
                     ))}
                     {resources.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="px-5 py-16 text-center">
+                          <td colSpan={9} className="px-5 py-16 text-center">
                             <div className="flex flex-col items-center justify-center">
                               <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3 border border-gray-100">
                                 <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" /></svg>
