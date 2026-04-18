@@ -168,7 +168,6 @@ public class ResourceService {
                 resource.getCapacity(),
                 resource.getLocation() != null ? resource.getLocation().getId() : null,
                 resource.getLocation() != null ? resource.getLocation().getDisplayName() : null,
-                null, // Deprecated availabilityWindows string
                 resource.getStatus(),
                 resource.getImageUrl(),
                 assetIds,
