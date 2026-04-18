@@ -14,5 +14,4 @@ public interface CourseOfferingRepository extends JpaRepository<CourseOffering, 
     List<CourseOffering> findBySemester(String semester);
     List<CourseOffering> findByStatus(CourseOfferingStatus status);
     List<CourseOffering> findBySemesterAndStatus(String semester, CourseOfferingStatus status);
-    List<CourseOffering> findByLecturerId(Long lecturerId);
 }

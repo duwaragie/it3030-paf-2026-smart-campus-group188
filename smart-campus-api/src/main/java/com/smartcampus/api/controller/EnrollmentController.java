@@ -23,7 +23,7 @@ public class EnrollmentController {
 
     private final EnrollmentService enrollmentService;
 
-    // POST /api/enrollments
+    // POST /api/enrollments  { "sectionId": N }
     @PostMapping("/api/enrollments")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<EnrollmentDTO> enroll(
@@ -31,7 +31,7 @@ public class EnrollmentController {
             @Valid @RequestBody EnrollRequest request) {
         User user = (User) authentication.getPrincipal();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(enrollmentService.enroll(user.getId(), request.getCourseOfferingId()));
+                .body(enrollmentService.enroll(user.getId(), request.getSectionId()));
     }
 
     // DELETE /api/enrollments/{id}
@@ -51,27 +51,32 @@ public class EnrollmentController {
         return ResponseEntity.ok(enrollmentService.listMine(user.getId()));
     }
 
-    // GET /api/enrollments/course/{offeringId}  (LECTURER/ADMIN)
-    @GetMapping("/api/enrollments/course/{offeringId}")
+    // GET /api/enrollments/section/{sectionId}  (LECTURER/ADMIN)
+    @GetMapping("/api/enrollments/section/{sectionId}")
     @PreAuthorize("hasRole('LECTURER')")
-    public ResponseEntity<List<EnrollmentDTO>> roster(@PathVariable Long offeringId) {
-        return ResponseEntity.ok(enrollmentService.listByCourse(offeringId));
+    public ResponseEntity<List<EnrollmentDTO>> roster(@PathVariable Long sectionId) {
+        return ResponseEntity.ok(enrollmentService.listBySection(sectionId));
     }
 
-    // PUT /api/enrollments/{id}/grade  (LECTURER/ADMIN)
+    // PUT /api/enrollments/{id}/grade  (LECTURER on same offering / ADMIN)
     @PutMapping("/api/enrollments/{id}/grade")
     @PreAuthorize("hasRole('LECTURER')")
     public ResponseEntity<EnrollmentDTO> setGrade(
+            Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody SetGradeRequest request) {
-        return ResponseEntity.ok(enrollmentService.setGrade(id, request.getGrade()));
+        User actor = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(enrollmentService.setGrade(id, request.getGrade(), actor));
     }
 
-    // POST /api/course-offerings/{offeringId}/release-grades  (LECTURER/ADMIN)
+    // POST /api/course-offerings/{offeringId}/release-grades  (LECTURER on offering / ADMIN)
     @PostMapping("/api/course-offerings/{offeringId}/release-grades")
     @PreAuthorize("hasRole('LECTURER')")
-    public ResponseEntity<Map<String, Integer>> releaseGrades(@PathVariable Long offeringId) {
-        int released = enrollmentService.releaseGradesForOffering(offeringId);
+    public ResponseEntity<Map<String, Integer>> releaseGrades(
+            Authentication authentication,
+            @PathVariable Long offeringId) {
+        User actor = (User) authentication.getPrincipal();
+        int released = enrollmentService.releaseGradesForOffering(offeringId, actor);
         return ResponseEntity.ok(Map.of("released", released));
     }
 

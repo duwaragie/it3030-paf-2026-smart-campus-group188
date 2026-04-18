@@ -9,6 +9,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EnrollRequest {
-    @NotNull(message = "Course offering id is required")
-    private Long courseOfferingId;
+    @NotNull(message = "Section id is required")
+    private Long sectionId;
 }

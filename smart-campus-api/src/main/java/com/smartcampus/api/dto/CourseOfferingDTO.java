@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -17,11 +19,18 @@ public class CourseOfferingDTO {
     private String description;
     private String semester;
     private Double credits;
-    private Integer capacity;
-    private Integer enrolledCount;
-    private Integer seatsAvailable;
-    private Long lecturerId;
-    private String lecturerName;
     private String prerequisites;
     private CourseOfferingStatus status;
+
+    /** Sections under this offering, each with its own lecturer and capacity. */
+    private List<CourseSectionDTO> sections;
+
+    /** Sum of capacity across all sections. */
+    private Integer totalCapacity;
+
+    /** Sum of ENROLLED + COMPLETED enrollments across all sections. */
+    private Integer totalEnrolled;
+
+    /** Distinct lecturer names from sections, comma-separated, for quick display. */
+    private String lecturerNames;
 }

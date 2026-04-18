@@ -16,6 +16,16 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String senderEmail;
 
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
+
+    private String absoluteLink(String link) {
+        if (link == null || link.isBlank()) return null;
+        if (link.startsWith("http://") || link.startsWith("https://")) return link;
+        String base = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
+        return link.startsWith("/") ? base + link : base + "/" + link;
+    }
+
     private static final String PRIMARY = "#0c1f3a";
     private static final String PRIMARY_LIGHT = "#1e3a5f";
     private static final String BG = "#f0f2f5";
@@ -57,8 +67,9 @@ public class EmailService {
             .append("<p style=\"margin:0;color:").append(TEXT).append(";font-size:14px;line-height:1.6;white-space:pre-line;\">").append(safeMessage).append("</p>")
             .append("</div>");
 
-        if (link != null && !link.isBlank()) {
-            String safeLink = escapeHtml(link);
+        String resolvedLink = absoluteLink(link);
+        if (resolvedLink != null) {
+            String safeLink = escapeHtml(resolvedLink);
             body.append("<div style=\"text-align:center;margin:0 0 24px;\">")
                 .append("<a href=\"").append(safeLink).append("\" style=\"display:inline-block;background:").append(PRIMARY).append(";color:").append(WHITE).append(";text-decoration:none;padding:12px 28px;border-radius:10px;font-size:14px;font-weight:600;\">Open in app</a>")
                 .append("</div>");

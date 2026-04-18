@@ -7,6 +7,7 @@ import com.smartcampus.api.exception.ResourceNotFoundException;
 import com.smartcampus.api.exception.UserNotFoundException;
 import com.smartcampus.api.model.*;
 import com.smartcampus.api.repository.CourseOfferingRepository;
+import com.smartcampus.api.repository.CourseSectionRepository;
 import com.smartcampus.api.repository.EnrollmentRepository;
 import com.smartcampus.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,54 +27,62 @@ import java.util.stream.Collectors;
 public class EnrollmentService {
 
     private final EnrollmentRepository enrollmentRepository;
+    private final CourseSectionRepository courseSectionRepository;
     private final CourseOfferingRepository courseOfferingRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
     /**
-     * Student self-enrolls in an open course offering.
-     * Performs: offering status check, duplicate check, prerequisites check, capacity vs waitlist.
+     * Student self-enrolls in a specific section.
+     * Checks: section exists, offering is OPEN, no duplicate across offering, prerequisites met,
+     * capacity on this section (else waitlist on this section).
      */
     @Transactional
-    public EnrollmentDTO enroll(Long studentId, Long offeringId) {
+    public EnrollmentDTO enroll(Long studentId, Long sectionId) {
         User student = userRepository.findById(studentId)
                 .orElseThrow(() -> new UserNotFoundException(studentId));
         if (student.getRole() != Role.STUDENT) {
             throw new BadRequestException("Only students can self-enroll.");
         }
 
-        CourseOffering offering = courseOfferingRepository.findById(offeringId)
+        CourseSection section = courseSectionRepository.findById(sectionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Course offering " + offeringId + " not found"));
+                        "Section " + sectionId + " not found"));
 
+        CourseOffering offering = section.getOffering();
         if (offering.getStatus() != CourseOfferingStatus.OPEN) {
             throw new BadRequestException("Enrollment for this course is not open.");
         }
 
-        enrollmentRepository.findByStudentIdAndOfferingId(studentId, offeringId)
+        // Block duplicate enrollment in this section (unless previously withdrawn and we're re-enrolling)
+        enrollmentRepository.findByStudentIdAndSectionId(studentId, sectionId)
                 .ifPresent(existing -> {
                     if (existing.getStatus() != EnrollmentStatus.WITHDRAWN) {
                         throw new BadRequestException(
-                                "You are already enrolled in this course.");
+                                "You are already enrolled in this section.");
                     }
                 });
-
-        // Prerequisite check: every prereq code must exist as a COMPLETED enrollment
-        // with a passing released grade (>= D, i.e. not F and not I/W).
-        List<String> missingPrereqs = missingPrerequisitesFor(student.getId(), offering.getPrerequisites());
-        if (!missingPrereqs.isEmpty()) {
+        // Block being active in a *different* section of the same offering
+        if (enrollmentRepository.existsActiveInOffering(studentId, offering.getId())) {
             throw new BadRequestException(
-                    "Missing prerequisites: " + String.join(", ", missingPrereqs));
+                    "You are already enrolled in another section of " + offering.getCode() + ".");
         }
 
-        long active = enrollmentRepository.countActiveByOfferingId(offeringId);
-        EnrollmentStatus status = active < offering.getCapacity()
+        // Prerequisite check
+        List<String> missing = missingPrerequisitesFor(studentId, offering.getPrerequisites());
+        if (!missing.isEmpty()) {
+            throw new BadRequestException(
+                    "Missing prerequisites: " + String.join(", ", missing));
+        }
+
+        long active = enrollmentRepository.countActiveBySectionId(sectionId);
+        EnrollmentStatus status = active < section.getCapacity()
                 ? EnrollmentStatus.ENROLLED
                 : EnrollmentStatus.WAITLISTED;
 
-        // Re-use withdrawn record if present (unique constraint on student+offering)
+        // Re-use existing (possibly withdrawn) row for the unique constraint
         Enrollment enrollment = enrollmentRepository
-                .findByStudentIdAndOfferingId(studentId, offeringId)
+                .findByStudentIdAndSectionId(studentId, sectionId)
                 .map(existing -> {
                     existing.setStatus(status);
                     existing.setWithdrawnAt(null);
@@ -77,28 +90,33 @@ public class EnrollmentService {
                 })
                 .orElseGet(() -> Enrollment.builder()
                         .student(student)
-                        .offering(offering)
+                        .section(section)
                         .status(status)
                         .gradeReleased(false)
                         .build());
 
         enrollment = enrollmentRepository.save(enrollment);
 
+        String sectionLabel = section.getLabel();
+        String lecturerBlurb = section.getLecturer() != null
+                ? " with " + section.getLecturer().getName()
+                : "";
+
         if (status == EnrollmentStatus.ENROLLED) {
             notificationService.notify(student,
                     NotificationType.ENROLLMENT_CONFIRMED,
                     NotificationPriority.MEDIUM,
-                    "Enrollment confirmed: " + offering.getCode(),
-                    "You're enrolled in " + offering.getTitle()
-                            + " (" + offering.getCredits() + " credits) for " + offering.getSemester() + ".",
+                    "Enrollment confirmed: " + offering.getCode() + " / " + sectionLabel,
+                    "You're enrolled in " + offering.getTitle() + " (" + sectionLabel + ")"
+                            + lecturerBlurb + " for " + offering.getSemester() + ".",
                     "/enrollments");
         } else {
             notificationService.notify(student,
                     NotificationType.ENROLLMENT_WAITLISTED,
                     NotificationPriority.MEDIUM,
-                    "Waitlisted: " + offering.getCode(),
-                    "The class is full. You're on the waitlist for " + offering.getTitle()
-                            + ". We'll notify you if a seat opens up.",
+                    "Waitlisted: " + offering.getCode() + " / " + sectionLabel,
+                    "The section is full. You're on the waitlist for " + offering.getTitle()
+                            + " (" + sectionLabel + "). We'll notify you if a seat opens up.",
                     "/enrollments");
         }
 
@@ -106,7 +124,8 @@ public class EnrollmentService {
     }
 
     /**
-     * Student withdraws. If they held an active seat, promote the oldest WAITLISTED student.
+     * Student withdraws. If they held an active seat, promote the oldest WAITLISTED student
+     * in the SAME section.
      */
     @Transactional
     public EnrollmentDTO withdraw(Long studentId, Long enrollmentId) {
@@ -128,24 +147,27 @@ public class EnrollmentService {
         enrollment.setWithdrawnAt(LocalDateTime.now());
         enrollment = enrollmentRepository.save(enrollment);
 
+        CourseSection section = enrollment.getSection();
+        CourseOffering offering = section.getOffering();
+
         notificationService.notify(enrollment.getStudent(),
                 NotificationType.ENROLLMENT_WITHDRAWN,
                 NotificationPriority.LOW,
-                "Withdrawal confirmed: " + enrollment.getOffering().getCode(),
-                "You've withdrawn from " + enrollment.getOffering().getTitle() + ".",
+                "Withdrawal confirmed: " + offering.getCode() + " / " + section.getLabel(),
+                "You've withdrawn from " + offering.getTitle() + " (" + section.getLabel() + ").",
                 "/enrollments");
 
         if (heldActiveSeat) {
-            promoteWaitlist(enrollment.getOffering());
+            promoteWaitlist(section);
         }
 
         return toDTO(enrollment);
     }
 
-    /** Promote the oldest waitlisted student in a course to ENROLLED. Called after a seat opens. */
-    private void promoteWaitlist(CourseOffering offering) {
+    /** Promote the oldest waitlisted student in a section to ENROLLED. */
+    private void promoteWaitlist(CourseSection section) {
         List<Enrollment> waitlist = enrollmentRepository
-                .findByOfferingIdAndStatus(offering.getId(), EnrollmentStatus.WAITLISTED);
+                .findBySectionIdAndStatus(section.getId(), EnrollmentStatus.WAITLISTED);
         if (waitlist.isEmpty()) return;
 
         waitlist.sort(Comparator.comparing(Enrollment::getEnrolledAt));
@@ -153,12 +175,13 @@ public class EnrollmentService {
         promoted.setStatus(EnrollmentStatus.ENROLLED);
         enrollmentRepository.save(promoted);
 
+        CourseOffering offering = section.getOffering();
         notificationService.notify(promoted.getStudent(),
                 NotificationType.WAITLIST_PROMOTED,
                 NotificationPriority.HIGH,
-                "Seat available: " + offering.getCode(),
+                "Seat available: " + offering.getCode() + " / " + section.getLabel(),
                 "Good news, a seat opened up in " + offering.getTitle()
-                        + " and you've been moved off the waitlist.",
+                        + " (" + section.getLabel() + ") and you've been moved off the waitlist.",
                 "/enrollments");
     }
 
@@ -169,38 +192,44 @@ public class EnrollmentService {
                 .toList();
     }
 
-    public List<EnrollmentDTO> listByCourse(Long offeringId) {
-        return enrollmentRepository.findByOfferingId(offeringId).stream()
+    public List<EnrollmentDTO> listBySection(Long sectionId) {
+        return enrollmentRepository.findBySectionId(sectionId).stream()
                 .sorted(Comparator.comparing(Enrollment::getEnrolledAt))
                 .map(this::toDTO)
                 .toList();
     }
 
-    /** Lecturer / admin sets a grade on an enrollment (does NOT auto-release). */
+    /**
+     * Lecturer sets a grade. Authorization: user must be a lecturer on any section of the
+     * offering this enrollment belongs to, OR an admin.
+     */
     @Transactional
-    public EnrollmentDTO setGrade(Long enrollmentId, Grade grade) {
+    public EnrollmentDTO setGrade(Long enrollmentId, Grade grade, User actor) {
         Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Enrollment " + enrollmentId + " not found"));
+
+        authorizeLecturerOrAdmin(actor, enrollment.getSection().getOffering().getId());
 
         if (enrollment.getStatus() == EnrollmentStatus.WITHDRAWN) {
             throw new BadRequestException("Cannot grade a withdrawn enrollment.");
         }
 
         enrollment.setGrade(grade);
-        // Setting a grade on its own doesn't release it or complete the course.
         return toDTO(enrollmentRepository.save(enrollment));
     }
 
     /**
-     * Bulk-release all grades for a course offering. Marks enrollments COMPLETED, grade released,
-     * and fires a HIGH priority notification to each student.
+     * Release every set-but-unreleased grade across all sections of an offering.
+     * Authorization: any lecturer assigned to any section on the offering, or admin.
      */
     @Transactional
-    public int releaseGradesForOffering(Long offeringId) {
+    public int releaseGradesForOffering(Long offeringId, User actor) {
         CourseOffering offering = courseOfferingRepository.findById(offeringId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Course offering " + offeringId + " not found"));
+
+        authorizeLecturerOrAdmin(actor, offeringId);
 
         List<Enrollment> enrollments = enrollmentRepository.findByOfferingId(offeringId).stream()
                 .filter(e -> e.getStatus() == EnrollmentStatus.ENROLLED && e.getGrade() != null)
@@ -225,7 +254,7 @@ public class EnrollmentService {
                     NotificationPriority.HIGH,
                     "Grade released: " + offering.getCode(),
                     "Your grade for " + offering.getTitle()
-                            + " is now available in your transcript.",
+                            + " (" + e.getSection().getLabel() + ") is now available in your transcript.",
                     "/transcript");
             count++;
         }
@@ -248,7 +277,8 @@ public class EnrollmentService {
         double totalPoints = 0.0;
         double totalCredits = 0.0;
         for (Enrollment e : gpaEligible) {
-            double credits = e.getOffering().getCredits() != null ? e.getOffering().getCredits() : 0.0;
+            Double credits = e.getSection().getOffering().getCredits();
+            if (credits == null) continue;
             Double points = e.getGrade().getGpaPoints();
             if (points == null) continue;
             totalPoints += points * credits;
@@ -267,6 +297,16 @@ public class EnrollmentService {
                 .build();
     }
 
+    private void authorizeLecturerOrAdmin(User actor, Long offeringId) {
+        if (actor.getRole() == Role.ADMIN) return;
+        if (actor.getRole() == Role.LECTURER
+                && courseSectionRepository.isLecturerOnOffering(offeringId, actor.getId())) {
+            return;
+        }
+        throw new BadRequestException(
+                "Only lecturers assigned to this offering (or admins) can perform this action.");
+    }
+
     private List<String> missingPrerequisitesFor(Long studentId, String prerequisites) {
         if (prerequisites == null || prerequisites.isBlank()) return List.of();
 
@@ -280,7 +320,7 @@ public class EnrollmentService {
         Set<String> passed = enrollmentRepository.findCompletedWithReleasedGrades(studentId).stream()
                 .filter(e -> e.getGrade() != null && e.getGrade() != Grade.F
                         && e.getGrade() != Grade.I && e.getGrade() != Grade.W)
-                .map(e -> e.getOffering().getCode())
+                .map(e -> e.getSection().getOffering().getCode())
                 .collect(Collectors.toSet());
 
         return required.stream()
@@ -289,17 +329,24 @@ public class EnrollmentService {
     }
 
     private EnrollmentDTO toDTO(Enrollment e) {
+        CourseSection section = e.getSection();
+        CourseOffering offering = section.getOffering();
         return EnrollmentDTO.builder()
                 .id(e.getId())
                 .studentId(e.getStudent().getId())
                 .studentName(e.getStudent().getName())
                 .studentEmail(e.getStudent().getEmail())
                 .studentRegistrationNumber(e.getStudent().getStudentRegistrationNumber())
-                .offeringId(e.getOffering().getId())
-                .courseCode(e.getOffering().getCode())
-                .courseTitle(e.getOffering().getTitle())
-                .semester(e.getOffering().getSemester())
-                .credits(e.getOffering().getCredits())
+                .sectionId(section.getId())
+                .sectionLabel(section.getLabel())
+                .sectionCapacity(section.getCapacity())
+                .lecturerId(section.getLecturer() != null ? section.getLecturer().getId() : null)
+                .lecturerName(section.getLecturer() != null ? section.getLecturer().getName() : null)
+                .offeringId(offering.getId())
+                .courseCode(offering.getCode())
+                .courseTitle(offering.getTitle())
+                .semester(offering.getSemester())
+                .credits(offering.getCredits())
                 .status(e.getStatus())
                 .grade(e.getGrade())
                 .gradeLabel(e.getGrade() != null ? e.getGrade().getLabel() : null)

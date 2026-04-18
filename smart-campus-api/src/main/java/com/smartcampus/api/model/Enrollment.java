@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "enrollments",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"student_id", "course_offering_id"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"student_id", "section_id"}))
 @Data
 @Builder
 @NoArgsConstructor
@@ -23,13 +23,16 @@ public class Enrollment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "student_id", nullable = false)
     private User student;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_offering_id", nullable = false)
-    private CourseOffering offering;
+    @JoinColumn(name = "section_id", nullable = false)
+    private CourseSection section;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

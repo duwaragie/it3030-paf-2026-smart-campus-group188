@@ -13,25 +13,33 @@ import java.util.Optional;
 @Repository
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
-    Optional<Enrollment> findByStudentIdAndOfferingId(Long studentId, Long offeringId);
+    Optional<Enrollment> findByStudentIdAndSectionId(Long studentId, Long sectionId);
 
     List<Enrollment> findByStudentId(Long studentId);
 
-    List<Enrollment> findByOfferingId(Long offeringId);
+    List<Enrollment> findBySectionId(Long sectionId);
+
+    List<Enrollment> findBySectionIdAndStatus(Long sectionId, EnrollmentStatus status);
 
     List<Enrollment> findByStudentIdAndStatus(Long studentId, EnrollmentStatus status);
 
-    List<Enrollment> findByOfferingIdAndStatus(Long offeringId, EnrollmentStatus status);
+    /** Whether the student already has a non-withdrawn enrollment in ANY section of this offering. */
+    @Query("SELECT COUNT(e) > 0 FROM Enrollment e " +
+           "WHERE e.student.id = :studentId " +
+           "AND e.section.offering.id = :offeringId " +
+           "AND e.status <> com.smartcampus.api.model.EnrollmentStatus.WITHDRAWN")
+    boolean existsActiveInOffering(@Param("studentId") Long studentId,
+                                   @Param("offeringId") Long offeringId);
 
     /**
-     * Count enrollments that count against capacity (ENROLLED + COMPLETED).
+     * Count enrollments that count against a section's capacity (ENROLLED + COMPLETED).
      * WAITLISTED and WITHDRAWN do not consume a seat.
      */
     @Query("SELECT COUNT(e) FROM Enrollment e " +
-           "WHERE e.offering.id = :offeringId " +
+           "WHERE e.section.id = :sectionId " +
            "AND e.status IN (com.smartcampus.api.model.EnrollmentStatus.ENROLLED, " +
            "                 com.smartcampus.api.model.EnrollmentStatus.COMPLETED)")
-    long countActiveByOfferingId(@Param("offeringId") Long offeringId);
+    long countActiveBySectionId(@Param("sectionId") Long sectionId);
 
     /** Student's completed courses with released grades (used for GPA calculation). */
     @Query("SELECT e FROM Enrollment e " +
@@ -39,4 +47,15 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
            "AND e.status = com.smartcampus.api.model.EnrollmentStatus.COMPLETED " +
            "AND e.gradeReleased = true")
     List<Enrollment> findCompletedWithReleasedGrades(@Param("studentId") Long studentId);
+
+    /** All active enrollments (ENROLLED or COMPLETED) across any section a given lecturer owns. */
+    @Query("SELECT e FROM Enrollment e " +
+           "WHERE e.section.lecturer.id = :lecturerId " +
+           "AND e.status IN (com.smartcampus.api.model.EnrollmentStatus.ENROLLED, " +
+           "                 com.smartcampus.api.model.EnrollmentStatus.COMPLETED)")
+    List<Enrollment> findForLecturer(@Param("lecturerId") Long lecturerId);
+
+    /** Enrollments within a specific offering (spans all sections). Used for offering-wide release. */
+    @Query("SELECT e FROM Enrollment e WHERE e.section.offering.id = :offeringId")
+    List<Enrollment> findByOfferingId(@Param("offeringId") Long offeringId);
 }

@@ -11,40 +11,32 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "course_offerings",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"code", "semester"}))
+@Table(name = "course_sections",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"course_offering_id", "label"}))
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CourseOffering {
+public class CourseSection {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "course_offering_id", nullable = false)
+    private CourseOffering offering;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lecturer_id")
+    private User lecturer;
+
+    /** Short display name for the section, e.g. "Group A" or "Section 01". */
     @Column(nullable = false, length = 32)
-    private String code;
+    private String label;
 
     @Column(nullable = false)
-    private String title;
-
-    @Column(length = 1000)
-    private String description;
-
-    @Column(nullable = false, length = 32)
-    private String semester;
-
-    @Column(nullable = false)
-    private Double credits;
-
-    /** Comma-separated course codes, e.g. "IT2030,IT2040". */
-    @Column(length = 500)
-    private String prerequisites;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private CourseOfferingStatus status;
+    private Integer capacity;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

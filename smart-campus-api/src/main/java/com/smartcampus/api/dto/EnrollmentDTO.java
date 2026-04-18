@@ -15,10 +15,17 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class EnrollmentDTO {
     private Long id;
+
     private Long studentId;
     private String studentName;
     private String studentEmail;
     private String studentRegistrationNumber;
+
+    private Long sectionId;
+    private String sectionLabel;
+    private Integer sectionCapacity;
+    private Long lecturerId;
+    private String lecturerName;
 
     private Long offeringId;
     private String courseCode;
