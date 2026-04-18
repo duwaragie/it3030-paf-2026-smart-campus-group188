@@ -150,7 +150,7 @@ export function CreateBookingForm({ resourceId, resourceName, editingBooking, on
               )}
               {resources.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name} — {r.location}{r.capacity ? ` (${r.capacity} pax)` : ''}
+                  {r.name}{r.locationName ? ` — ${r.locationName}` : ''}{r.capacity ? ` (${r.capacity} pax)` : ''}
                 </option>
               ))}
             </select>
