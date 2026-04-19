@@ -136,7 +136,7 @@ public class NotificationEventListener {
                 .message(String.format(
                         "\"%s\" (%s) at %s has been assigned to you.",
                         t.getTitle(), t.getPriority(), t.getLocation()))
-                .link("/maintenance/tickets")
+                .link(ticketLinkFor(assignee))
                 .build());
     }
 
@@ -164,7 +164,7 @@ public class NotificationEventListener {
                     .priority(NotificationPriority.MEDIUM)
                     .title("Your ticket is now " + status)
                     .message(String.format("\"%s\" is now %s.%s", t.getTitle(), status, extra))
-                    .link("/maintenance/tickets")
+                    .link(ticketLinkFor(creator))
                     .build());
         }
 
@@ -178,7 +178,7 @@ public class NotificationEventListener {
                     .priority(NotificationPriority.LOW)
                     .title("Ticket status: " + status)
                     .message(String.format("\"%s\" is now %s.%s", t.getTitle(), status, extra))
-                    .link("/maintenance/tickets")
+                    .link(ticketLinkFor(assignee))
                     .build());
         }
     }
@@ -200,7 +200,7 @@ public class NotificationEventListener {
                     .title("New comment on your ticket")
                     .message(String.format("%s commented on \"%s\": %s",
                             c.getAuthor().getName(), t.getTitle(), preview))
-                    .link("/maintenance/tickets")
+                    .link(ticketLinkFor(creator))
                     .build());
         }
 
@@ -215,9 +215,16 @@ public class NotificationEventListener {
                     .title("New comment on assigned ticket")
                     .message(String.format("%s commented on \"%s\": %s",
                             c.getAuthor().getName(), t.getTitle(), preview))
-                    .link("/maintenance/tickets")
+                    .link(ticketLinkFor(assignee))
                     .build());
         }
+    }
+
+    private String ticketLinkFor(User user) {
+        if (user != null && user.getRole() == Role.TECHNICAL_STAFF) {
+            return "/technician/dashboard";
+        }
+        return "/maintenance/tickets";
     }
 
     private NotificationPriority mapTicketPriority(TicketPriority p) {
