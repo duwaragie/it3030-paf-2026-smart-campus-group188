@@ -1,12 +1,14 @@
 package com.smartcampus.api.service;
 
 import com.smartcampus.api.dto.*;
+import com.smartcampus.api.event.TicketEvents;
 import com.smartcampus.api.exception.TicketNotFoundException;
 import com.smartcampus.api.exception.UserNotFoundException;
 import com.smartcampus.api.model.*;
 import com.smartcampus.api.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -26,6 +28,7 @@ public class TicketService {
     private final TicketCommentRepository ticketCommentRepository;
     private final TicketImageRepository ticketImageRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${app.upload.tickets-dir:./uploads/tickets}")
     private String uploadDir;
@@ -42,7 +45,9 @@ public class TicketService {
                 .preferredContactPhone(dto.getPreferredContactPhone())
                 .createdBy(currentUser)
                 .build();
-        return convertToDTO(ticketRepository.save(ticket));
+        Ticket saved = ticketRepository.save(ticket);
+        eventPublisher.publishEvent(new TicketEvents.TicketCreated(saved));
+        return convertToDTO(saved);
     }
 
     public List<TicketResponseDTO> getAllTickets(User currentUser) {
@@ -71,6 +76,7 @@ public class TicketService {
 
         validateStatusTransition(ticket.getStatus(), dto.getStatus(), currentUser.getRole());
 
+        TicketStatus previousStatus = ticket.getStatus();
         ticket.setStatus(dto.getStatus());
 
         if (dto.getStatus() == TicketStatus.REJECTED) {
@@ -84,7 +90,10 @@ public class TicketService {
             ticket.setResolutionNotes(dto.getResolutionNotes());
         }
 
-        return convertToDTO(ticketRepository.save(ticket));
+        Ticket saved = ticketRepository.save(ticket);
+        eventPublisher.publishEvent(
+                new TicketEvents.TicketStatusChanged(saved, previousStatus, currentUser.getId()));
+        return convertToDTO(saved);
     }
 
     private void validateStatusTransition(TicketStatus current, TicketStatus next, Role role) {
@@ -137,7 +146,9 @@ public class TicketService {
 
         ticket.setAssignedTo(assignee);
         ticket.setAssignedAt(LocalDateTime.now());
-        return convertToDTO(ticketRepository.save(ticket));
+        Ticket saved = ticketRepository.save(ticket);
+        eventPublisher.publishEvent(new TicketEvents.TicketAssigned(saved, currentUser.getId()));
+        return convertToDTO(saved);
     }
 
     public void deleteTicket(Long id, User currentUser) {
@@ -234,7 +245,9 @@ public class TicketService {
                 .author(currentUser)
                 .content(dto.getContent())
                 .build();
-        return convertCommentToDTO(ticketCommentRepository.save(comment));
+        TicketComment saved = ticketCommentRepository.save(comment);
+        eventPublisher.publishEvent(new TicketEvents.TicketCommentAdded(ticket, saved));
+        return convertCommentToDTO(saved);
     }
 
     public TicketCommentResponseDTO editComment(Long ticketId, Long commentId, TicketCommentRequestDTO dto, User currentUser) {
