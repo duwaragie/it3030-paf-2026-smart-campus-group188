@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
-import { ticketService, type TicketDTO, type TicketStatus, type TicketPriority, type TicketCategory, type TicketCommentDTO, type CreateTicketRequest } from '@/services/ticketService';
-import { adminService, type UserDTO } from '@/services/adminService';
+import { ticketService, type TicketDTO, type TicketStatus, type TicketPriority, type TicketCategory, type TicketCommentDTO } from '@/services/ticketService';
 import { useAuthStore } from '@/store/authStore';
 
 const PRIORITY_STYLE: Record<TicketPriority, string> = {
@@ -23,13 +22,12 @@ const CATEGORIES: TicketCategory[] = [
   'ELECTRICAL', 'PLUMBING', 'IT_EQUIPMENT', 'FURNITURE', 'HVAC', 'SAFETY', 'CLEANING', 'OTHER',
 ];
 const PRIORITIES: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-const ALL_STATUSES: TicketStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED'];
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function AuthImage({ imageId, onDelete }: { imageId: number; onDelete: (id: number) => void }) {
+function AuthImage({ imageId, onDelete, canDelete }: { imageId: number; onDelete: (id: number) => void; canDelete: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,53 +44,48 @@ function AuthImage({ imageId, onDelete }: { imageId: number; onDelete: (id: numb
       {src
         ? <img src={src} alt="attachment" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
         : <div className="w-24 h-24 bg-gray-100 rounded-lg animate-pulse" />}
-      <button
-        onClick={() => onDelete(imageId)}
-        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs hidden group-hover:flex items-center justify-center"
-      >×</button>
+      {canDelete && (
+        <button
+          onClick={() => onDelete(imageId)}
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs hidden group-hover:flex items-center justify-center"
+        >×</button>
+      )}
     </div>
   );
 }
 
-const emptyForm: CreateTicketRequest = {
-  title: '', location: '', category: '' as TicketCategory, description: '', priority: '' as TicketPriority,
-  preferredContactEmail: '', preferredContactPhone: '',
-};
+const emptyForm = { title: '', location: '', category: '' as TicketCategory, description: '', priority: '' as TicketPriority, preferredContactEmail: '', preferredContactPhone: '' };
 
-export default function IncidentsPage() {
+export default function MyTicketsPage() {
   const user = useAuthStore(s => s.user);
+  const isLecturer = user?.role === 'TECHNICAL_STAFF';
+  const canSeeAllTickets = user?.role === 'TECHNICAL_STAFF' || user?.role === 'LECTURER';
 
   const [tickets, setTickets] = useState<TicketDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<TicketStatus | 'ALL'>('ALL');
 
+  const [filterStatus, setFilterStatus] = useState<TicketStatus | 'ALL'>('ALL');
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState<CreateTicketRequest>(emptyForm);
+  const [form, setForm] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [creating, setCreating] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const createFileRef = useRef<HTMLInputElement>(null);
 
   const [selected, setSelected] = useState<TicketDTO | null>(null);
-  const [newStatus, setNewStatus] = useState<TicketStatus>('OPEN');
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [resolutionNotes, setResolutionNotes] = useState('');
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [assignUserId, setAssignUserId] = useState('');
-  const [assigning, setAssigning] = useState(false);
-  const [technicians, setTechnicians] = useState<UserDTO[]>([]);
   const [commentText, setCommentText] = useState('');
   const [addingComment, setAddingComment] = useState(false);
   const [editingComment, setEditingComment] = useState<TicketCommentDTO | null>(null);
   const [editCommentText, setEditCommentText] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<TicketDTO | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [newStatus, setNewStatus] = useState<TicketStatus>('OPEN');
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { void loadTickets(); void loadTechnicians(); }, []);
+  useEffect(() => { void loadTickets(); }, []);
 
   async function loadTickets() {
     try {
@@ -105,40 +98,6 @@ export default function IncidentsPage() {
       setLoading(false);
     }
   }
-
-  async function loadTechnicians() {
-    try {
-      const res = await adminService.getAllUsers();
-      setTechnicians(res.data.filter(u => u.role === 'TECHNICAL_STAFF'));
-    } catch {
-      // non-critical, silently fail
-    }
-  }
-
-  const technicianWorkload = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const todayMap: Record<number, number> = {};
-    const activeMap: Record<number, number> = {};
-
-    for (const t of tickets) {
-      if (t.assignedToId) {
-        if (t.assignedAt) {
-          const assigned = new Date(t.assignedAt);
-          if (assigned >= todayStart && assigned <= todayEnd) {
-            todayMap[t.assignedToId] = (todayMap[t.assignedToId] ?? 0) + 1;
-          }
-        }
-        if (t.status === 'OPEN' || t.status === 'IN_PROGRESS') {
-          activeMap[t.assignedToId] = (activeMap[t.assignedToId] ?? 0) + 1;
-        }
-      }
-    }
-    return { today: todayMap, active: activeMap };
-  }, [tickets]);
 
   function flashSuccess(msg: string) {
     setSuccess(msg);
@@ -158,7 +117,10 @@ export default function IncidentsPage() {
 
   function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    setAttachments(prev => [...prev, ...files].slice(0, 3));
+    setAttachments(prev => {
+      const combined = [...prev, ...files].slice(0, 3);
+      return combined;
+    });
     if (createFileRef.current) createFileRef.current.value = '';
   }
 
@@ -172,10 +134,11 @@ export default function IncidentsPage() {
     try {
       setCreating(true);
       const res = await ticketService.create({
-        ...form,
         title: form.title.trim(),
         location: form.location.trim(),
+        category: form.category,
         description: form.description.trim(),
+        priority: form.priority,
         preferredContactEmail: form.preferredContactEmail || undefined,
         preferredContactPhone: form.preferredContactPhone || undefined,
       });
@@ -187,7 +150,7 @@ export default function IncidentsPage() {
       setShowCreate(false);
       setForm(emptyForm);
       setAttachments([]);
-      flashSuccess('Ticket created.');
+      flashSuccess('Ticket created successfully.');
     } catch {
       setError('Failed to create ticket.');
     } finally {
@@ -195,60 +158,18 @@ export default function IncidentsPage() {
     }
   }
 
+  function openDetail(ticket: TicketDTO) {
+    setSelected(ticket);
+    setCommentText('');
+    setEditingComment(null);
+    setNewStatus(ticket.status);
+    setResolutionNotes(ticket.resolutionNotes || '');
+  }
+
   async function refreshSelected(id: number) {
     const res = await ticketService.getById(id);
     setSelected(res.data);
     setTickets(prev => prev.map(t => t.id === id ? res.data : t));
-  }
-
-  function openDetail(ticket: TicketDTO) {
-    setSelected(ticket);
-    setNewStatus(ticket.status);
-    setRejectionReason('');
-    setResolutionNotes(ticket.resolutionNotes || '');
-    setAssignUserId(ticket.assignedToId?.toString() || '');
-    setCommentText('');
-    setEditingComment(null);
-  }
-
-  async function handleUpdateStatus() {
-    if (!selected) return;
-    if (newStatus === 'REJECTED' && !rejectionReason.trim()) {
-      setError('Rejection reason is required.');
-      return;
-    }
-    try {
-      setUpdatingStatus(true);
-      await ticketService.updateStatus(selected.id, {
-        status: newStatus,
-        rejectionReason: newStatus === 'REJECTED' ? rejectionReason : undefined,
-        resolutionNotes: resolutionNotes || undefined,
-      });
-      await refreshSelected(selected.id);
-      flashSuccess('Status updated.');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Failed to update status.');
-    } finally {
-      setUpdatingStatus(false);
-    }
-  }
-
-  async function handleAssign() {
-    if (!selected || !assignUserId) return;
-    const id = parseInt(assignUserId);
-    if (isNaN(id)) return;
-    try {
-      setAssigning(true);
-      await ticketService.assign(selected.id, id);
-      await refreshSelected(selected.id);
-      flashSuccess('Ticket assigned.');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Failed to assign ticket.');
-    } finally {
-      setAssigning(false);
-    }
   }
 
   async function handleAddComment() {
@@ -312,30 +233,23 @@ export default function IncidentsPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!deleteConfirm) return;
+  async function handleUpdateStatus() {
+    if (!selected) return;
     try {
-      setDeleting(true);
-      await ticketService.delete(deleteConfirm.id);
-      setTickets(prev => prev.filter(t => t.id !== deleteConfirm.id));
-      setDeleteConfirm(null);
-      flashSuccess('Ticket deleted.');
-    } catch {
-      setError('Failed to delete ticket.');
+      setUpdatingStatus(true);
+      await ticketService.updateStatus(selected.id, { status: newStatus, resolutionNotes: resolutionNotes || undefined });
+      await refreshSelected(selected.id);
+      flashSuccess('Status updated.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Failed to update status.');
     } finally {
-      setDeleting(false);
+      setUpdatingStatus(false);
     }
   }
 
-  const tabs: (TicketStatus | 'ALL')[] = ['ALL', ...ALL_STATUSES];
   const filtered = filterStatus === 'ALL' ? tickets : tickets.filter(t => t.status === filterStatus);
-
-  const stats = {
-    total: tickets.length,
-    open: tickets.filter(t => t.status === 'OPEN').length,
-    inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
-    resolved: tickets.filter(t => t.status === 'RESOLVED').length,
-  };
+  const tabs: (TicketStatus | 'ALL')[] = ['ALL', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED'];
 
   return (
     <AppLayout>
@@ -344,15 +258,17 @@ export default function IncidentsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-campus-900">Incident Ticketing</h1>
-            <p className="text-sm text-gray-500 mt-1">View, assign, and manage maintenance and incident tickets.</p>
+            <h1 className="text-2xl font-bold text-campus-900">My Tickets</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {canSeeAllTickets ? 'View and manage all maintenance tickets.' : 'Report and track your maintenance incidents.'}
+            </p>
           </div>
           <button
-            onClick={() => { setShowCreate(true); setForm(emptyForm); setFormErrors({}); }}
+            onClick={() => { setShowCreate(true); setForm(emptyForm); setFormErrors({}); setAttachments([]); }}
             className="h-10 px-5 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg>
-            New Ticket
+            Report Ticket
           </button>
         </div>
 
@@ -366,21 +282,6 @@ export default function IncidentsPage() {
         {success && (
           <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">{success}</div>
         )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: 'Total', value: stats.total, color: 'text-campus-800' },
-            { label: 'Open', value: stats.open, color: 'text-blue-600' },
-            { label: 'In Progress', value: stats.inProgress, color: 'text-amber-600' },
-            { label: 'Resolved', value: stats.resolved, color: 'text-emerald-600' },
-          ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-400 mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
 
         {/* Filter Tabs */}
         <div className="flex gap-1 flex-wrap">
@@ -406,7 +307,7 @@ export default function IncidentsPage() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/50">
-                    {['#', 'Title', 'Reporter', 'Category', 'Priority', 'Status', 'Assigned To', 'Created', 'Actions'].map(h => (
+                    {['#', 'Title', 'Location', 'Category', 'Priority', 'Status', 'Created', 'Actions'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -415,8 +316,8 @@ export default function IncidentsPage() {
                   {filtered.map(t => (
                     <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                       <td className="px-5 py-4 text-sm font-mono text-gray-400">#{t.id}</td>
-                      <td className="px-5 py-4 text-sm font-semibold text-campus-800 max-w-[180px] truncate">{t.title}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{t.createdByName}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-campus-800 max-w-[200px] truncate">{t.title}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600 max-w-[140px] truncate">{t.location}</td>
                       <td className="px-5 py-4 text-sm text-gray-500">{t.category.replace('_', ' ')}</td>
                       <td className="px-5 py-4">
                         <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
@@ -424,11 +325,9 @@ export default function IncidentsPage() {
                       <td className="px-5 py-4">
                         <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${STATUS_STYLE[t.status]}`}>{t.status.replace('_', ' ')}</span>
                       </td>
-                      <td className="px-5 py-4 text-sm text-gray-500">{t.assignedToName || '—'}</td>
-                      <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
-                      <td className="px-5 py-4 flex gap-3">
+                      <td className="px-5 py-4 text-sm text-gray-500 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                      <td className="px-5 py-4">
                         <button onClick={() => openDetail(t)} className="text-xs font-semibold text-campus-600 hover:text-campus-800 transition-colors">View</button>
-                        <button onClick={() => setDeleteConfirm(t)} className="text-xs font-semibold text-red-400 hover:text-red-600 transition-colors">Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -444,24 +343,38 @@ export default function IncidentsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-campus-900">New Incident Ticket</h2>
-              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">×</button>
+              <h2 className="text-lg font-bold text-campus-900">Report New Ticket</h2>
+              <button onClick={() => { setShowCreate(false); setAttachments([]); }} className="text-gray-400 hover:text-gray-600 text-xl font-bold">×</button>
             </div>
             <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Title *</label>
-                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Brief description of the issue" className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.title ? 'border-red-400' : 'border-gray-200'}`} />
+                  <input
+                    value={form.title}
+                    onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="Brief description of the issue"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.title ? 'border-red-400' : 'border-gray-200'}`}
+                  />
                   {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Location *</label>
-                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Building A, Room 101" className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.location ? 'border-red-400' : 'border-gray-200'}`} />
+                  <input
+                    value={form.location}
+                    onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                    placeholder="e.g. Building A, Room 101"
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.location ? 'border-red-400' : 'border-gray-200'}`}
+                  />
                   {formErrors.location && <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Category *</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as TicketCategory }))} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.category ? 'border-red-400' : 'border-gray-200'}`}>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm(f => ({ ...f, category: e.target.value as TicketCategory }))}
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.category ? 'border-red-400' : 'border-gray-200'}`}
+                  >
                     <option value="">Select category</option>
                     {CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
                   </select>
@@ -469,12 +382,22 @@ export default function IncidentsPage() {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Description *</label>
-                  <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Describe the issue in detail..." className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 resize-none ${formErrors.description ? 'border-red-400' : 'border-gray-200'}`} />
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    placeholder="Describe the issue in detail..."
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 resize-none ${formErrors.description ? 'border-red-400' : 'border-gray-200'}`}
+                  />
                   {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Priority *</label>
-                  <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value as TicketPriority }))} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.priority ? 'border-red-400' : 'border-gray-200'}`}>
+                  <select
+                    value={form.priority}
+                    onChange={e => setForm(f => ({ ...f, priority: e.target.value as TicketPriority }))}
+                    className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.priority ? 'border-red-400' : 'border-gray-200'}`}
+                  >
                     <option value="">Select priority</option>
                     {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
@@ -482,11 +405,22 @@ export default function IncidentsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Contact Email</label>
-                  <input type="email" value={form.preferredContactEmail} onChange={e => setForm(f => ({ ...f, preferredContactEmail: e.target.value }))} placeholder="contact@email.com" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                  <input
+                    type="email"
+                    value={form.preferredContactEmail}
+                    onChange={e => setForm(f => ({ ...f, preferredContactEmail: e.target.value }))}
+                    placeholder="your@email.com"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
-                  <input value={form.preferredContactPhone} onChange={e => setForm(f => ({ ...f, preferredContactPhone: e.target.value }))} placeholder="07X XXXXXXX" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                  <input
+                    value={form.preferredContactPhone}
+                    onChange={e => setForm(f => ({ ...f, preferredContactPhone: e.target.value }))}
+                    placeholder="07X XXXXXXX"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                  />
                 </div>
 
                 {/* Attachments */}
@@ -501,7 +435,11 @@ export default function IncidentsPage() {
                       </div>
                     ))}
                     {attachments.length < 3 && (
-                      <button type="button" onClick={() => createFileRef.current?.click()} className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-500 hover:border-campus-400 hover:text-campus-600 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => createFileRef.current?.click()}
+                        className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-500 hover:border-campus-400 hover:text-campus-600 transition-colors"
+                      >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path d="M12 5v14M5 12h14" /></svg>
                         Add Image
                       </button>
@@ -511,28 +449,12 @@ export default function IncidentsPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setShowCreate(false); setAttachments([]); }} className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
                 <button type="submit" disabled={creating} className="px-5 py-2 text-sm font-semibold bg-campus-800 text-white rounded-xl hover:bg-campus-700 transition-colors disabled:opacity-60">
-                  {creating ? 'Creating…' : 'Create Ticket'}
+                  {creating ? 'Submitting…' : 'Submit Ticket'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold text-campus-900">Delete Ticket</h3>
-            <p className="text-sm text-gray-600">Are you sure you want to delete <strong>"{deleteConfirm.title}"</strong>? This action cannot be undone.</p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm font-semibold bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60">
-                {deleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -557,14 +479,38 @@ export default function IncidentsPage() {
             <div className="px-6 py-5 space-y-6">
               {/* Info Grid */}
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Location</p><p className="text-gray-700">{selected.location}</p></div>
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Category</p><p className="text-gray-700">{selected.category.replace('_', ' ')}</p></div>
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reported By</p><p className="text-gray-700">{selected.createdByName}</p></div>
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Assigned To</p><p className="text-gray-700">{selected.assignedToName || '—'}</p></div>
-                {selected.preferredContactEmail && <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Email</p><p className="text-gray-700">{selected.preferredContactEmail}</p></div>}
-                {selected.preferredContactPhone && <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Phone</p><p className="text-gray-700">{selected.preferredContactPhone}</p></div>}
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Created</p><p className="text-gray-700">{fmtDate(selected.createdAt)}</p></div>
-                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Last Updated</p><p className="text-gray-700">{fmtDate(selected.updatedAt)}</p></div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Location</p>
+                  <p className="text-gray-700">{selected.location}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Category</p>
+                  <p className="text-gray-700">{selected.category.replace('_', ' ')}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reported By</p>
+                  <p className="text-gray-700">{selected.createdByName}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Assigned To</p>
+                  <p className="text-gray-700">{selected.assignedToName || '—'}</p>
+                </div>
+                {selected.preferredContactEmail && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Email</p>
+                    <p className="text-gray-700">{selected.preferredContactEmail}</p>
+                  </div>
+                )}
+                {selected.preferredContactPhone && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Phone</p>
+                    <p className="text-gray-700">{selected.preferredContactPhone}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Created</p>
+                  <p className="text-gray-700">{fmtDate(selected.createdAt)}</p>
+                </div>
               </div>
 
               {/* Description */}
@@ -573,12 +519,15 @@ export default function IncidentsPage() {
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 whitespace-pre-wrap">{selected.description}</p>
               </div>
 
+              {/* Rejection Reason */}
               {selected.rejectionReason && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200">
                   <p className="text-xs font-semibold text-red-600 uppercase mb-1">Rejection Reason</p>
                   <p className="text-sm text-red-700">{selected.rejectionReason}</p>
                 </div>
               )}
+
+              {/* Resolution Notes */}
               {selected.resolutionNotes && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                   <p className="text-xs font-semibold text-emerald-600 uppercase mb-1">Resolution Notes</p>
@@ -586,92 +535,48 @@ export default function IncidentsPage() {
                 </div>
               )}
 
-              {/* Admin Controls */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* Status Update */}
+              {/* Status Update — Lecturer only */}
+              {isLecturer && !['CLOSED', 'REJECTED'].includes(selected.status) && (
                 <div className="border border-gray-100 rounded-xl p-4 space-y-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase">Update Status</p>
-                  <select
-                    value={newStatus}
-                    onChange={e => setNewStatus(e.target.value as TicketStatus)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
-                  >
-                    {ALL_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                  </select>
-                  {newStatus === 'REJECTED' && (
-                    <input value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Rejection reason *" className="w-full border border-red-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-                  )}
-                  {(newStatus === 'RESOLVED' || newStatus === 'CLOSED') && (
-                    <input value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)} placeholder="Resolution notes" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
-                  )}
-                  <button onClick={handleUpdateStatus} disabled={updatingStatus} className="w-full py-1.5 text-sm font-semibold bg-campus-800 text-white rounded-lg hover:bg-campus-700 transition-colors disabled:opacity-60">
-                    {updatingStatus ? 'Saving…' : 'Update Status'}
-                  </button>
-                </div>
-
-                {/* Assign Technician */}
-                <div className="border border-gray-100 rounded-xl p-4 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">Assign Technician</p>
-                  {technicians.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">No technical staff accounts found.</p>
-                  ) : (
+                  <div className="flex gap-3 flex-wrap">
                     <select
-                      value={assignUserId}
-                      onChange={e => setAssignUserId(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-300"
+                      value={newStatus}
+                      onChange={e => setNewStatus(e.target.value as TicketStatus)}
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
                     >
-                      <option value="">— Select technician —</option>
-                      {technicians.map(tech => {
-                        const todayCount = technicianWorkload.today[tech.id] ?? 0;
-                        const activeCount = technicianWorkload.active[tech.id] ?? 0;
-                        const atLimit = todayCount >= 5;
-                        const label = atLimit
-                          ? `${tech.name} — FULL (${todayCount}/5 today)`
-                          : `${tech.name} — ${todayCount}/5 today, ${activeCount} active`;
-                        return (
-                          <option key={tech.id} value={tech.id} disabled={atLimit}>
-                            {label}
-                          </option>
-                        );
-                      })}
+                      <option value="OPEN">OPEN</option>
+                      <option value="IN_PROGRESS">IN PROGRESS</option>
+                      <option value="RESOLVED">RESOLVED</option>
                     </select>
-                  )}
-                  {assignUserId && (
-                    <div className="flex items-center gap-2 text-xs">
-                      {(() => {
-                        const tech = technicians.find(t => t.id === parseInt(assignUserId));
-                        const todayCount = tech ? (technicianWorkload.today[tech.id] ?? 0) : 0;
-                        const activeCount = tech ? (technicianWorkload.active[tech.id] ?? 0) : 0;
-                        const atLimit = todayCount >= 5;
-                        if (atLimit) return (
-                          <><span className="w-2 h-2 rounded-full bg-red-500 shrink-0" /><span className="text-red-600 font-medium">{tech?.name} has reached the daily limit of 5 tickets.</span></>
-                        );
-                        if (todayCount > 0) return (
-                          <><span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" /><span className="text-gray-500">{tech?.name} has <strong>{todayCount}</strong>/5 today, <strong>{activeCount}</strong> currently active.</span></>
-                        );
-                        return (
-                          <><span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" /><span className="text-gray-500">{tech?.name} is free today — 0/5 assigned.</span></>
-                        );
-                      })()}
-                    </div>
-                  )}
-                  <button
-                    onClick={handleAssign}
-                    disabled={assigning || !assignUserId || (technicianWorkload.today[parseInt(assignUserId)] ?? 0) >= 5}
-                    className="w-full py-1.5 text-sm font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-60"
-                  >
-                    {assigning ? 'Assigning…' : 'Assign'}
-                  </button>
+                    <input
+                      value={resolutionNotes}
+                      onChange={e => setResolutionNotes(e.target.value)}
+                      placeholder="Resolution notes (optional)"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                    />
+                    <button
+                      onClick={handleUpdateStatus}
+                      disabled={updatingStatus}
+                      className="px-4 py-1.5 text-sm font-semibold bg-campus-800 text-white rounded-lg hover:bg-campus-700 transition-colors disabled:opacity-60"
+                    >
+                      {updatingStatus ? 'Saving…' : 'Update'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Images */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-gray-400 uppercase">Images ({selected.imageIds.length}/3)</p>
-                  {selected.imageIds.length < 3 && (
+                  {selected.createdById === user?.id && selected.imageIds.length < 3 && (
                     <>
-                      <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-xs font-semibold text-campus-600 hover:text-campus-800 transition-colors disabled:opacity-60">
+                      <button
+                        onClick={() => fileRef.current?.click()}
+                        disabled={uploading}
+                        className="text-xs font-semibold text-campus-600 hover:text-campus-800 transition-colors disabled:opacity-60"
+                      >
                         {uploading ? 'Uploading…' : '+ Upload Image'}
                       </button>
                       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUploadImage} />
@@ -683,7 +588,7 @@ export default function IncidentsPage() {
                 ) : (
                   <div className="flex gap-3 flex-wrap">
                     {selected.imageIds.map(id => (
-                      <AuthImage key={id} imageId={id} onDelete={handleDeleteImage} />
+                      <AuthImage key={id} imageId={id} canDelete={selected.createdById === user?.id} onDelete={handleDeleteImage} />
                     ))}
                   </div>
                 )}
@@ -698,7 +603,11 @@ export default function IncidentsPage() {
                     <div key={c.id} className="bg-gray-50 rounded-xl p-3">
                       {editingComment?.id === c.id ? (
                         <div className="flex gap-2">
-                          <input value={editCommentText} onChange={e => setEditCommentText(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                          <input
+                            value={editCommentText}
+                            onChange={e => setEditCommentText(e.target.value)}
+                            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                          />
                           <button onClick={handleEditComment} className="text-xs font-semibold text-campus-600 px-3">Save</button>
                           <button onClick={() => setEditingComment(null)} className="text-xs text-gray-400 px-2">Cancel</button>
                         </div>
@@ -708,9 +617,9 @@ export default function IncidentsPage() {
                             <span className="text-xs font-semibold text-campus-800">{c.authorName}</span>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] text-gray-400">{fmtDate(c.createdAt)}</span>
-                              {(c.authorId === user?.id || user?.role === 'ADMIN') && (
+                              {c.authorId === user?.id && (
                                 <>
-                                  {c.authorId === user?.id && <button onClick={() => { setEditingComment(c); setEditCommentText(c.content); }} className="text-[10px] text-campus-500 hover:text-campus-700">Edit</button>}
+                                  <button onClick={() => { setEditingComment(c); setEditCommentText(c.content); }} className="text-[10px] text-campus-500 hover:text-campus-700">Edit</button>
                                   <button onClick={() => handleDeleteComment(c.id)} className="text-[10px] text-red-400 hover:text-red-600">Delete</button>
                                 </>
                               )}
@@ -730,7 +639,11 @@ export default function IncidentsPage() {
                     className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddComment(); } }}
                   />
-                  <button onClick={handleAddComment} disabled={addingComment || !commentText.trim()} className="px-4 py-2 text-sm font-semibold bg-campus-800 text-white rounded-xl hover:bg-campus-700 transition-colors disabled:opacity-60">
+                  <button
+                    onClick={handleAddComment}
+                    disabled={addingComment || !commentText.trim()}
+                    className="px-4 py-2 text-sm font-semibold bg-campus-800 text-white rounded-xl hover:bg-campus-700 transition-colors disabled:opacity-60"
+                  >
                     {addingComment ? '…' : 'Post'}
                   </button>
                 </div>
