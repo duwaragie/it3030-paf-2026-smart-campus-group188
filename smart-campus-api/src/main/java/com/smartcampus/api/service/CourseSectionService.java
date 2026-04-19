@@ -64,7 +64,6 @@ public class CourseSectionService {
                     });
         }
 
-        // Guard: can't shrink below current enrolled count
         long active = enrollmentRepository.countActiveBySectionId(sectionId);
         if (request.getCapacity() < active) {
             throw new BadRequestException(

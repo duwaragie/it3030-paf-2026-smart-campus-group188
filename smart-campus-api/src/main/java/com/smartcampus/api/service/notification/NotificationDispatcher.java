@@ -10,14 +10,9 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Central fan-out. In-app always fires (the user can't disable it — it's the
- * safety net so no notification is ever silently dropped). Email and push
- * fire only if the user's preference row allows it (default: email ON, push OFF).
- *
- * Adding a new channel = implementing {@link NotificationChannel}; Spring
- * auto-registers it here via the injected list.
- */
+// In-app always fires (can't be disabled — safety net). Email and push are
+// gated on the user's preference row; new channels just implement
+// NotificationChannel and Spring auto-registers them here.
 @Slf4j
 @Component
 public class NotificationDispatcher {
@@ -38,8 +33,6 @@ public class NotificationDispatcher {
 
     public void dispatch(NotificationRequest request) {
         Long userId = request.getRecipient().getId();
-
-        // In-app is the baseline channel — always on.
         send(NotificationChannelType.IN_APP, request);
 
         UserNotificationPreference pref = preferenceRepository.findByUserId(userId).orElse(null);

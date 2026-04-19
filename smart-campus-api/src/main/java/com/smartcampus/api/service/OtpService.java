@@ -27,7 +27,6 @@ public class OtpService {
 
     @Transactional
     public void generateAndSendOtp(User user, String tempPassword) {
-        // Check cooldown: reject if last OTP was sent within 60 seconds
         Optional<OtpToken> existingToken = otpTokenRepository.findByUser(user);
         if (existingToken.isPresent()) {
             LocalDateTime cooldownThreshold = LocalDateTime.now().minusSeconds(COOLDOWN_SECONDS);
@@ -36,13 +35,9 @@ public class OtpService {
             }
         }
 
-        // Clear previous OTPs for this user
         otpTokenRepository.deleteByUser(user);
 
-        // Generate 6-digit OTP using SecureRandom (range 100000-999999)
         String plainOtp = String.valueOf(secureRandom.nextInt(900_000) + 100_000);
-
-        // Hash OTP with BCrypt before storing
         String hashedOtp = passwordEncoder.encode(plainOtp);
 
         OtpToken otpToken = new OtpToken();
@@ -65,25 +60,20 @@ public class OtpService {
 
         OtpToken token = otpTokenOpt.get();
 
-        // Check expiry
         if (token.getExpiryDate().isBefore(LocalDateTime.now())) {
             otpTokenRepository.delete(token);
             return Optional.empty();
         }
 
-        // Check attempt limit
         if (token.getAttempts() >= MAX_ATTEMPTS) {
             otpTokenRepository.delete(token);
             throw new RuntimeException("Maximum verification attempts exceeded. Please request a new code.");
         }
 
-        // BCrypt compare
         if (passwordEncoder.matches(otpCode, token.getOtpCode())) {
-            // Success — delete token and return it
             otpTokenRepository.delete(token);
             return Optional.of(token);
         } else {
-            // Failed — increment attempts and save
             token.setAttempts(token.getAttempts() + 1);
             otpTokenRepository.save(token);
             return Optional.empty();

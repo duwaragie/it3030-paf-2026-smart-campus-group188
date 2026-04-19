@@ -2,13 +2,8 @@ package com.smartcampus.api.event;
 
 import com.smartcampus.api.model.Booking;
 
-/**
- * Domain events fired by BookingService. The notification module listens
- * to these — BookingService itself has no direct dependency on notifications.
- *
- * Same pattern will apply to the ticket module when it lands: publish an
- * event, don't call the notification service directly.
- */
+// Ticket module should follow the same pattern: publish events, don't
+// call NotificationService directly.
 public final class BookingEvents {
 
     private BookingEvents() {}

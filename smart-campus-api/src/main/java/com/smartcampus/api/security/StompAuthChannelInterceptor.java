@@ -16,11 +16,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Authenticates STOMP CONNECT frames from the JWT passed in the "Authorization" header.
- * The resolved user Principal is attached to the session so messages sent to
- * /user/{id}/queue/... are delivered to the right subscriber.
- */
+// Reads the JWT from STOMP CONNECT and sets the user Principal so
+// /user/{id}/queue/... routes to the correct subscriber.
 @Slf4j
 @Component
 @RequiredArgsConstructor

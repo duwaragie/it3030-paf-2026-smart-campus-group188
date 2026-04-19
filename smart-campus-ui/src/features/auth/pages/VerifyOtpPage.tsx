@@ -23,7 +23,6 @@ export default function VerifyOtpPage() {
     inputRefs.current[0]?.focus();
   }, [email, navigate]);
 
-  // Cooldown countdown timer
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => setCooldown((c) => c - 1), 1000);

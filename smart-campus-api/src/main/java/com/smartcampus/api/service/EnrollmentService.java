@@ -1,6 +1,9 @@
 package com.smartcampus.api.service;
 
+import com.smartcampus.api.dto.BulkGradeResult;
+import com.smartcampus.api.dto.BulkGradeRowResult;
 import com.smartcampus.api.dto.EnrollmentDTO;
+import com.smartcampus.api.dto.GradeChangeDTO;
 import com.smartcampus.api.dto.TranscriptDTO;
 import com.smartcampus.api.exception.BadRequestException;
 import com.smartcampus.api.exception.ResourceNotFoundException;
@@ -9,16 +12,29 @@ import com.smartcampus.api.model.*;
 import com.smartcampus.api.repository.CourseOfferingRepository;
 import com.smartcampus.api.repository.CourseSectionRepository;
 import com.smartcampus.api.repository.EnrollmentRepository;
+import com.smartcampus.api.repository.GradeChangeRepository;
 import com.smartcampus.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,13 +46,9 @@ public class EnrollmentService {
     private final CourseSectionRepository courseSectionRepository;
     private final CourseOfferingRepository courseOfferingRepository;
     private final UserRepository userRepository;
+    private final GradeChangeRepository gradeChangeRepository;
     private final NotificationService notificationService;
 
-    /**
-     * Student self-enrolls in a specific section.
-     * Checks: section exists, offering is OPEN, no duplicate across offering, prerequisites met,
-     * capacity on this section (else waitlist on this section).
-     */
     @Transactional
     public EnrollmentDTO enroll(Long studentId, Long sectionId) {
         User student = userRepository.findById(studentId)
@@ -54,7 +66,7 @@ public class EnrollmentService {
             throw new BadRequestException("Enrollment for this course is not open.");
         }
 
-        // Block duplicate enrollment in this section (unless previously withdrawn and we're re-enrolling)
+        // Duplicate in this section (WITHDRAWN rows can be re-enrolled).
         enrollmentRepository.findByStudentIdAndSectionId(studentId, sectionId)
                 .ifPresent(existing -> {
                     if (existing.getStatus() != EnrollmentStatus.WITHDRAWN) {
@@ -62,13 +74,11 @@ public class EnrollmentService {
                                 "You are already enrolled in this section.");
                     }
                 });
-        // Block being active in a *different* section of the same offering
         if (enrollmentRepository.existsActiveInOffering(studentId, offering.getId())) {
             throw new BadRequestException(
                     "You are already enrolled in another section of " + offering.getCode() + ".");
         }
 
-        // Prerequisite check
         List<String> missing = missingPrerequisitesFor(studentId, offering.getPrerequisites());
         if (!missing.isEmpty()) {
             throw new BadRequestException(
@@ -80,7 +90,7 @@ public class EnrollmentService {
                 ? EnrollmentStatus.ENROLLED
                 : EnrollmentStatus.WAITLISTED;
 
-        // Re-use existing (possibly withdrawn) row for the unique constraint
+        // Reuse an existing (withdrawn) row to satisfy the unique constraint.
         Enrollment enrollment = enrollmentRepository
                 .findByStudentIdAndSectionId(studentId, sectionId)
                 .map(existing -> {
@@ -123,10 +133,6 @@ public class EnrollmentService {
         return toDTO(enrollment);
     }
 
-    /**
-     * Student withdraws. If they held an active seat, promote the oldest WAITLISTED student
-     * in the SAME section.
-     */
     @Transactional
     public EnrollmentDTO withdraw(Long studentId, Long enrollmentId) {
         Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
@@ -164,7 +170,6 @@ public class EnrollmentService {
         return toDTO(enrollment);
     }
 
-    /** Promote the oldest waitlisted student in a section to ENROLLED. */
     private void promoteWaitlist(CourseSection section) {
         List<Enrollment> waitlist = enrollmentRepository
                 .findBySectionIdAndStatus(section.getId(), EnrollmentStatus.WAITLISTED);
@@ -199,12 +204,9 @@ public class EnrollmentService {
                 .toList();
     }
 
-    /**
-     * Lecturer sets a grade. Authorization: user must be a lecturer on any section of the
-     * offering this enrollment belongs to, OR an admin.
-     */
+    // Post-release edits notify the student; every change is recorded in grade_changes.
     @Transactional
-    public EnrollmentDTO setGrade(Long enrollmentId, Grade grade, User actor) {
+    public EnrollmentDTO setGrade(Long enrollmentId, Grade grade, String reason, User actor) {
         Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Enrollment " + enrollmentId + " not found"));
@@ -215,14 +217,89 @@ public class EnrollmentService {
             throw new BadRequestException("Cannot grade a withdrawn enrollment.");
         }
 
+        Grade previous = enrollment.getGrade();
+        if (previous == grade) return toDTO(enrollment);
+
+        boolean wasReleased = Boolean.TRUE.equals(enrollment.getGradeReleased());
         enrollment.setGrade(grade);
-        return toDTO(enrollmentRepository.save(enrollment));
+        Enrollment saved = enrollmentRepository.save(enrollment);
+
+        recordGradeChange(saved, previous, grade, wasReleased, reason, actor);
+
+        if (wasReleased) {
+            notifyGradeUpdated(saved, previous, grade);
+        }
+
+        return toDTO(saved);
     }
 
-    /**
-     * Release every set-but-unreleased grade across all sections of an offering.
-     * Authorization: any lecturer assigned to any section on the offering, or admin.
-     */
+    private void recordGradeChange(Enrollment enrollment,
+                                   Grade previous,
+                                   Grade next,
+                                   boolean wasReleased,
+                                   String reason,
+                                   User actor) {
+        gradeChangeRepository.save(GradeChange.builder()
+                .enrollment(enrollment)
+                .previousGrade(previous)
+                .newGrade(next)
+                .wasReleased(wasReleased)
+                .changedBy(actor)
+                .reason(reason != null && !reason.isBlank() ? reason.trim() : null)
+                .build());
+    }
+
+    private void notifyGradeUpdated(Enrollment enrollment, Grade previous, Grade next) {
+        CourseOffering offering = enrollment.getSection().getOffering();
+        String from = previous != null ? previous.getLabel() : "—";
+        String to = next != null ? next.getLabel() : "—";
+        notificationService.notify(enrollment.getStudent(),
+                NotificationType.GRADE_UPDATED,
+                NotificationPriority.HIGH,
+                "Grade updated: " + offering.getCode(),
+                "Your grade for " + offering.getTitle()
+                        + " (" + enrollment.getSection().getLabel() + ") was updated from "
+                        + from + " to " + to + ". Check your transcript.",
+                "/transcript");
+    }
+
+    @Transactional(readOnly = true)
+    public List<GradeChangeDTO> gradeHistory(Long enrollmentId, User actor) {
+        Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Enrollment " + enrollmentId + " not found"));
+
+        boolean isOwner = enrollment.getStudent().getId().equals(actor.getId());
+        boolean isAdmin = actor.getRole() == Role.ADMIN;
+        boolean isLecturer = actor.getRole() == Role.LECTURER
+                && courseSectionRepository.isLecturerOnOffering(
+                        enrollment.getSection().getOffering().getId(), actor.getId());
+        if (!isOwner && !isAdmin && !isLecturer) {
+            throw new BadRequestException(
+                    "You don't have permission to view this grade history.");
+        }
+
+        return gradeChangeRepository
+                .findByEnrollmentIdOrderByChangedAtDesc(enrollmentId)
+                .stream()
+                .map(this::toHistoryDTO)
+                .toList();
+    }
+
+    private GradeChangeDTO toHistoryDTO(GradeChange gc) {
+        return GradeChangeDTO.builder()
+                .id(gc.getId())
+                .previousGrade(gc.getPreviousGrade())
+                .previousGradeLabel(gc.getPreviousGrade() != null ? gc.getPreviousGrade().getLabel() : null)
+                .newGrade(gc.getNewGrade())
+                .newGradeLabel(gc.getNewGrade() != null ? gc.getNewGrade().getLabel() : null)
+                .wasReleased(gc.getWasReleased())
+                .changedByName(gc.getChangedBy() != null ? gc.getChangedBy().getName() : null)
+                .reason(gc.getReason())
+                .changedAt(gc.getChangedAt())
+                .build();
+    }
+
     @Transactional
     public int releaseGradesForOffering(Long offeringId, User actor) {
         CourseOffering offering = courseOfferingRepository.findById(offeringId)
@@ -259,6 +336,181 @@ public class EnrollmentService {
             count++;
         }
         return count;
+    }
+
+    @Transactional(readOnly = true)
+    public String buildGradeCsvTemplate(Long sectionId, User actor) {
+        CourseSection section = courseSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Section " + sectionId + " not found"));
+        authorizeLecturerOrAdmin(actor, section.getOffering().getId());
+
+        List<Enrollment> roster = enrollmentRepository.findBySectionId(sectionId).stream()
+                .filter(e -> e.getStatus() != EnrollmentStatus.WITHDRAWN)
+                .sorted(Comparator.comparing(e ->
+                        e.getStudent().getStudentRegistrationNumber() == null
+                                ? ""
+                                : e.getStudent().getStudentRegistrationNumber()))
+                .toList();
+
+        StringWriter out = new StringWriter();
+        try (CSVPrinter printer = new CSVPrinter(out, CSVFormat.DEFAULT
+                .builder().setHeader("SRN", "Student Name", "Current Grade", "Grade").build())) {
+            for (Enrollment e : roster) {
+                String srn = e.getStudent().getStudentRegistrationNumber();
+                String name = e.getStudent().getName();
+                String current = e.getGrade() != null ? e.getGrade().getLabel() : "";
+                printer.printRecord(srn == null ? "" : srn, name, current, "");
+            }
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to build CSV template: " + e.getMessage());
+        }
+        return out.toString();
+    }
+
+    // VALID rows are applied; INVALID ones skipped and reported. Extra columns
+    // in the CSV (Student Name, Current Grade) are ignored for round-tripping.
+    @Transactional
+    public BulkGradeResult bulkGradeFromCsv(Long sectionId,
+                                            InputStream csvStream,
+                                            boolean dryRun,
+                                            User actor) {
+        CourseSection section = courseSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Section " + sectionId + " not found"));
+        authorizeLecturerOrAdmin(actor, section.getOffering().getId());
+
+        Map<String, Enrollment> bySrn = new HashMap<>();
+        for (Enrollment e : enrollmentRepository.findBySectionId(sectionId)) {
+            String srn = e.getStudent().getStudentRegistrationNumber();
+            if (srn != null && !srn.isBlank()) {
+                bySrn.put(srn.trim().toUpperCase(), e);
+            }
+        }
+
+        List<BulkGradeRowResult> rows = new ArrayList<>();
+        int validCount = 0, skipped = 0, invalid = 0;
+
+        try (CSVParser parser = CSVFormat.DEFAULT.builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreEmptyLines(true)
+                .setTrim(true)
+                .build()
+                .parse(new InputStreamReader(csvStream, StandardCharsets.UTF_8))) {
+
+            if (!parser.getHeaderMap().keySet().stream()
+                    .map(h -> h.trim().toLowerCase()).toList().contains("srn")
+                || !parser.getHeaderMap().keySet().stream()
+                    .map(h -> h.trim().toLowerCase()).toList().contains("grade")) {
+                throw new BadRequestException(
+                        "CSV must have 'SRN' and 'Grade' header columns.");
+            }
+
+            int rowNum = 0;
+            for (CSVRecord record : parser) {
+                rowNum++;
+                String srn = columnCaseInsensitive(record, "SRN");
+                String rawGrade = columnCaseInsensitive(record, "Grade");
+
+                BulkGradeRowResult.BulkGradeRowResultBuilder b = BulkGradeRowResult.builder()
+                        .rowNumber(rowNum)
+                        .srn(srn)
+                        .inputGrade(rawGrade);
+
+                if (srn == null || srn.isBlank()) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Missing SRN").build());
+                    invalid++;
+                    continue;
+                }
+
+                Enrollment enrollment = bySrn.get(srn.trim().toUpperCase());
+                if (enrollment == null) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("No enrollment for SRN '" + srn + "' in this section")
+                            .build());
+                    invalid++;
+                    continue;
+                }
+
+                b.studentName(enrollment.getStudent().getName())
+                 .currentGrade(enrollment.getGrade());
+
+                if (enrollment.getStatus() == EnrollmentStatus.WITHDRAWN) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Student has withdrawn from this section").build());
+                    invalid++;
+                    continue;
+                }
+
+                if (rawGrade == null || rawGrade.isBlank()) {
+                    rows.add(b.status(BulkGradeRowResult.Status.SKIPPED)
+                            .error("Grade cell left blank").build());
+                    skipped++;
+                    continue;
+                }
+
+                Grade parsed = Grade.fromLabel(rawGrade);
+                if (parsed == null) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Unrecognized grade '" + rawGrade + "'").build());
+                    invalid++;
+                    continue;
+                }
+
+                rows.add(b.parsedGrade(parsed)
+                        .status(BulkGradeRowResult.Status.VALID)
+                        .build());
+                validCount++;
+            }
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to parse CSV: " + e.getMessage());
+        }
+
+        BulkGradeResult result = BulkGradeResult.builder()
+                .total(rows.size())
+                .valid(validCount)
+                .skipped(skipped)
+                .invalid(invalid)
+                .rows(rows)
+                .committed(false)
+                .appliedCount(0)
+                .build();
+
+        if (dryRun) {
+            return result;
+        }
+
+        int applied = 0;
+        for (BulkGradeRowResult row : rows) {
+            if (row.getStatus() != BulkGradeRowResult.Status.VALID) continue;
+            Enrollment enrollment = bySrn.get(row.getSrn().trim().toUpperCase());
+            Grade previous = enrollment.getGrade();
+            Grade next = row.getParsedGrade();
+            if (previous == next) continue;
+
+            boolean wasReleased = Boolean.TRUE.equals(enrollment.getGradeReleased());
+            enrollment.setGrade(next);
+            Enrollment saved = enrollmentRepository.save(enrollment);
+            recordGradeChange(saved, previous, next, wasReleased,
+                    "Bulk CSV upload", actor);
+            if (wasReleased) notifyGradeUpdated(saved, previous, next);
+            applied++;
+        }
+        result.setCommitted(true);
+        result.setAppliedCount(applied);
+        return result;
+    }
+
+    private static String columnCaseInsensitive(CSVRecord record, String name) {
+        for (String header : record.getParser().getHeaderMap().keySet()) {
+            if (header.trim().equalsIgnoreCase(name)) {
+                String v = record.get(header);
+                return v == null ? null : v.trim();
+            }
+        }
+        return null;
     }
 
     public TranscriptDTO transcript(Long studentId) {

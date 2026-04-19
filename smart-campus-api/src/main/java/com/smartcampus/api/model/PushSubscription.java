@@ -9,11 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * One browser's Web Push endpoint + keys, owned by a user. A user can have
- * many (phone, laptop, etc.). Unique on endpoint — re-subscribing from the
- * same browser updates the same row.
- */
+// Unique on endpoint — re-subscribing from the same browser updates in place.
 @Entity
 @Table(name = "push_subscriptions",
         indexes = @Index(name = "idx_push_sub_user", columnList = "user_id"),

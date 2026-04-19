@@ -65,8 +65,6 @@ function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    // Register the push service worker once on app load — subscription flow
-    // is kicked off later from the preferences toggle.
     void registerServiceWorker();
   }, []);
 

@@ -1,16 +1,6 @@
 import { api } from '@/lib/axios';
 
-/**
- * Web Push opt-in/out flow.
- *
- * Lifecycle:
- *   - enable()  → request permission → fetch VAPID public key → subscribe via
- *                 browser PushManager → POST endpoint + keys to backend
- *   - disable() → unsubscribe browser-side → DELETE on backend
- *
- * Support requires HTTPS (localhost is exempt) + Service Worker + Push APIs.
- */
-
+// Web Push requires HTTPS (localhost is exempt) + Service Worker + Push APIs.
 export type PushState =
   | 'unsupported'
   | 'denied'
@@ -68,7 +58,6 @@ export async function enablePush(): Promise<PushState> {
   const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'));
   if (!reg) return 'unsupported';
 
-  // Fetch VAPID public key from backend (cached after first call by the browser).
   const { data } = await api.get<{ publicKey: string }>('/push/vapid-public-key');
   const appServerKey = urlBase64ToUint8Array(data.publicKey);
 
@@ -98,16 +87,9 @@ export async function disablePush(): Promise<PushState> {
   const reg = await navigator.serviceWorker.getRegistration();
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
-    try {
-      await api.delete('/push/subscribe', { params: { endpoint: sub.endpoint } });
-    } catch {
-      /* backend cleanup is best-effort; we still unsubscribe locally */
-    }
-    try {
-      await sub.unsubscribe();
-    } catch {
-      /* ignore */
-    }
+    // Backend cleanup is best-effort; still unsubscribe locally either way.
+    try { await api.delete('/push/subscribe', { params: { endpoint: sub.endpoint } }); } catch { /* ignore */ }
+    try { await sub.unsubscribe(); } catch { /* ignore */ }
   }
   return Notification.permission === 'denied' ? 'denied' : 'granted-unsubscribed';
 }

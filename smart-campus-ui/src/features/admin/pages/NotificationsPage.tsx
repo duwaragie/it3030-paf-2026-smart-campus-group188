@@ -25,7 +25,6 @@ const labelCls = 'text-xs font-medium text-gray-700 mb-1 block';
 const inputCls =
   'w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 focus:border-campus-400';
 
-// Rounds the current local time up to the next minute for the scheduledAt default.
 function defaultScheduledAt(): string {
   const d = new Date(Date.now() + 5 * 60_000);
   d.setSeconds(0, 0);

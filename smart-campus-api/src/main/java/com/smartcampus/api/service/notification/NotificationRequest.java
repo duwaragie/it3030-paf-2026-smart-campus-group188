@@ -6,9 +6,6 @@ import com.smartcampus.api.model.User;
 import lombok.Builder;
 import lombok.Value;
 
-/**
- * Immutable notification payload passed from the dispatcher to each channel.
- */
 @Value
 @Builder
 public class NotificationRequest {
@@ -17,6 +14,5 @@ public class NotificationRequest {
     NotificationPriority priority;
     String title;
     String message;
-    /** Deep link into the app (optional). */
     String link;
 }

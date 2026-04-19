@@ -35,14 +35,13 @@ public class PasswordResetService {
     public void initiatePasswordReset(String email) {
         Optional<User> userOpt = userRepository.findByEmail(email);
 
-        // Silently return if user not found — prevents user enumeration
+        // Silent on unknown email — prevents account enumeration.
         if (userOpt.isEmpty()) {
             return;
         }
 
         User user = userOpt.get();
 
-        // Check cooldown
         Optional<PasswordResetToken> existingToken = resetTokenRepository.findByUser(user);
         if (existingToken.isPresent()) {
             LocalDateTime cooldownThreshold = LocalDateTime.now().minusSeconds(COOLDOWN_SECONDS);
@@ -51,10 +50,8 @@ public class PasswordResetService {
             }
         }
 
-        // Clear previous tokens
         resetTokenRepository.deleteByUser(user);
 
-        // Generate raw token and BCrypt hash it
         String rawToken = UUID.randomUUID().toString();
         String hashedToken = passwordEncoder.encode(rawToken);
 
@@ -66,7 +63,6 @@ public class PasswordResetService {
                 .build();
         resetTokenRepository.save(resetToken);
 
-        // Build reset URL and send email
         String resetUrl = frontendUrl + "/reset-password?token=" + rawToken + "&email=" + email;
         emailService.sendPasswordResetEmail(email, resetUrl, EXPIRY_MINUTES);
     }
@@ -79,26 +75,22 @@ public class PasswordResetService {
         PasswordResetToken token = resetTokenRepository.findByUser(user)
                 .orElseThrow(() -> new RuntimeException("Invalid or expired reset link."));
 
-        // Check expiry
         if (token.getExpiryDate().isBefore(Instant.now())) {
             resetTokenRepository.delete(token);
             throw new RuntimeException("Reset link has expired. Please request a new one.");
         }
 
-        // Check attempt limit
         if (token.getAttempts() >= MAX_ATTEMPTS) {
             resetTokenRepository.delete(token);
             throw new RuntimeException("Maximum attempts exceeded. Please request a new reset link.");
         }
 
-        // BCrypt compare
         if (!passwordEncoder.matches(rawToken, token.getTokenHash())) {
             token.setAttempts(token.getAttempts() + 1);
             resetTokenRepository.save(token);
             throw new RuntimeException("Invalid reset token.");
         }
 
-        // Success — update password and clean up
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         resetTokenRepository.delete(token);

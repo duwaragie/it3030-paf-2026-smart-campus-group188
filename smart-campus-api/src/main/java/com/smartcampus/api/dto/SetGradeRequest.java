@@ -2,6 +2,7 @@ package com.smartcampus.api.dto;
 
 import com.smartcampus.api.model.Grade;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,4 +13,7 @@ import lombok.NoArgsConstructor;
 public class SetGradeRequest {
     @NotNull(message = "Grade is required")
     private Grade grade;
+
+    @Size(max = 500)
+    private String reason;
 }

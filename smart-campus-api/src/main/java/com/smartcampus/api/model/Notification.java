@@ -42,7 +42,6 @@ public class Notification {
     @Column(nullable = false, length = 1000)
     private String message;
 
-    /** Deep link into the app, e.g. "/enrollments" or "/transcript". Optional. */
     @Column(length = 255)
     private String link;
 

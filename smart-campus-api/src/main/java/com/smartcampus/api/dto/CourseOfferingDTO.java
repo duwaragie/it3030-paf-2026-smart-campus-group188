@@ -22,15 +22,8 @@ public class CourseOfferingDTO {
     private String prerequisites;
     private CourseOfferingStatus status;
 
-    /** Sections under this offering, each with its own lecturer and capacity. */
     private List<CourseSectionDTO> sections;
-
-    /** Sum of capacity across all sections. */
     private Integer totalCapacity;
-
-    /** Sum of ENROLLED + COMPLETED enrollments across all sections. */
     private Integer totalEnrolled;
-
-    /** Distinct lecturer names from sections, comma-separated, for quick display. */
     private String lecturerNames;
 }
