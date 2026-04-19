@@ -33,4 +33,19 @@ public enum Grade {
     public String getLabel() { return label; }
     public Double getGpaPoints() { return gpaPoints; }
     public boolean isCountsForGpa() { return countsForGpa; }
+
+    /**
+     * Resolve a grade from its human-readable label, ignoring case and any
+     * whitespace (leading, trailing, or internal — "b -" and " A + " both match).
+     * Returns null for blank or unrecognized input.
+     */
+    public static Grade fromLabel(String label) {
+        if (label == null) return null;
+        String normalized = label.replaceAll("\\s+", "").toUpperCase();
+        if (normalized.isEmpty()) return null;
+        for (Grade g : values()) {
+            if (g.label.equalsIgnoreCase(normalized)) return g;
+        }
+        return null;
+    }
 }

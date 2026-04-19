@@ -67,6 +67,29 @@ export interface TranscriptDTO {
   entries: EnrollmentDTO[];
 }
 
+export type BulkGradeRowStatus = 'VALID' | 'SKIPPED' | 'INVALID';
+
+export interface BulkGradeRowResult {
+  rowNumber: number;
+  srn: string;
+  inputGrade?: string | null;
+  studentName?: string | null;
+  currentGrade?: Grade | null;
+  parsedGrade?: Grade | null;
+  status: BulkGradeRowStatus;
+  error?: string | null;
+}
+
+export interface BulkGradeResult {
+  total: number;
+  valid: number;
+  skipped: number;
+  invalid: number;
+  committed: boolean;
+  appliedCount: number;
+  rows: BulkGradeRowResult[];
+}
+
 export const enrollmentService = {
   enroll: (sectionId: number) =>
     api.post<EnrollmentDTO>('/enrollments', { sectionId }),
@@ -82,4 +105,22 @@ export const enrollmentService = {
     api.put<EnrollmentDTO>(`/enrollments/${enrollmentId}/grade`, { grade }),
 
   transcript: () => api.get<TranscriptDTO>('/transcripts/me'),
+
+  downloadGradeTemplate: (sectionId: number) =>
+    api.get(`/course-sections/${sectionId}/grades/template`, {
+      responseType: 'blob',
+    }),
+
+  uploadGradesCsv: (sectionId: number, file: File, dryRun: boolean) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<BulkGradeResult>(
+      `/course-sections/${sectionId}/grades/csv`,
+      form,
+      {
+        params: { dryRun },
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+  },
 };

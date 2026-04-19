@@ -1,5 +1,7 @@
 package com.smartcampus.api.service;
 
+import com.smartcampus.api.dto.BulkGradeResult;
+import com.smartcampus.api.dto.BulkGradeRowResult;
 import com.smartcampus.api.dto.EnrollmentDTO;
 import com.smartcampus.api.dto.TranscriptDTO;
 import com.smartcampus.api.exception.BadRequestException;
@@ -11,14 +13,26 @@ import com.smartcampus.api.repository.CourseSectionRepository;
 import com.smartcampus.api.repository.EnrollmentRepository;
 import com.smartcampus.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -259,6 +273,188 @@ public class EnrollmentService {
             count++;
         }
         return count;
+    }
+
+    /**
+     * Build a CSV template for a section: one row per non-withdrawn enrollment,
+     * with SRN + student name pre-filled and an empty Grade column ready to fill.
+     * The lecturer downloads this, edits grades in Excel, and uploads it back.
+     */
+    @Transactional(readOnly = true)
+    public String buildGradeCsvTemplate(Long sectionId, User actor) {
+        CourseSection section = courseSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Section " + sectionId + " not found"));
+        authorizeLecturerOrAdmin(actor, section.getOffering().getId());
+
+        List<Enrollment> roster = enrollmentRepository.findBySectionId(sectionId).stream()
+                .filter(e -> e.getStatus() != EnrollmentStatus.WITHDRAWN)
+                .sorted(Comparator.comparing(e ->
+                        e.getStudent().getStudentRegistrationNumber() == null
+                                ? ""
+                                : e.getStudent().getStudentRegistrationNumber()))
+                .toList();
+
+        StringWriter out = new StringWriter();
+        try (CSVPrinter printer = new CSVPrinter(out, CSVFormat.DEFAULT
+                .builder().setHeader("SRN", "Student Name", "Current Grade", "Grade").build())) {
+            for (Enrollment e : roster) {
+                String srn = e.getStudent().getStudentRegistrationNumber();
+                String name = e.getStudent().getName();
+                String current = e.getGrade() != null ? e.getGrade().getLabel() : "";
+                printer.printRecord(srn == null ? "" : srn, name, current, "");
+            }
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to build CSV template: " + e.getMessage());
+        }
+        return out.toString();
+    }
+
+    /**
+     * Parse an uploaded CSV of {SRN, Grade} rows and, optionally, commit the
+     * valid rows. Expected header: {@code SRN} and {@code Grade} (other columns
+     * like Student Name or Current Grade are ignored — so the template round-trips).
+     *
+     * Commit semantics are all-or-nothing for INVALID rows: if any row fails
+     * validation, nothing is written; the lecturer fixes the file and retries.
+     * SKIPPED rows (empty Grade cell) are never written regardless of dry-run.
+     */
+    @Transactional
+    public BulkGradeResult bulkGradeFromCsv(Long sectionId,
+                                            InputStream csvStream,
+                                            boolean dryRun,
+                                            User actor) {
+        CourseSection section = courseSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Section " + sectionId + " not found"));
+        authorizeLecturerOrAdmin(actor, section.getOffering().getId());
+
+        // Build SRN → enrollment lookup once (roster is typically 30-200 students).
+        Map<String, Enrollment> bySrn = new HashMap<>();
+        for (Enrollment e : enrollmentRepository.findBySectionId(sectionId)) {
+            String srn = e.getStudent().getStudentRegistrationNumber();
+            if (srn != null && !srn.isBlank()) {
+                bySrn.put(srn.trim().toUpperCase(), e);
+            }
+        }
+
+        List<BulkGradeRowResult> rows = new ArrayList<>();
+        int validCount = 0, skipped = 0, invalid = 0;
+
+        try (CSVParser parser = CSVFormat.DEFAULT.builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setIgnoreEmptyLines(true)
+                .setTrim(true)
+                .build()
+                .parse(new InputStreamReader(csvStream, StandardCharsets.UTF_8))) {
+
+            if (!parser.getHeaderMap().keySet().stream()
+                    .map(h -> h.trim().toLowerCase()).toList().contains("srn")
+                || !parser.getHeaderMap().keySet().stream()
+                    .map(h -> h.trim().toLowerCase()).toList().contains("grade")) {
+                throw new BadRequestException(
+                        "CSV must have 'SRN' and 'Grade' header columns.");
+            }
+
+            int rowNum = 0;
+            for (CSVRecord record : parser) {
+                rowNum++;
+                String srn = columnCaseInsensitive(record, "SRN");
+                String rawGrade = columnCaseInsensitive(record, "Grade");
+
+                BulkGradeRowResult.BulkGradeRowResultBuilder b = BulkGradeRowResult.builder()
+                        .rowNumber(rowNum)
+                        .srn(srn)
+                        .inputGrade(rawGrade);
+
+                if (srn == null || srn.isBlank()) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Missing SRN").build());
+                    invalid++;
+                    continue;
+                }
+
+                Enrollment enrollment = bySrn.get(srn.trim().toUpperCase());
+                if (enrollment == null) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("No enrollment for SRN '" + srn + "' in this section")
+                            .build());
+                    invalid++;
+                    continue;
+                }
+
+                b.studentName(enrollment.getStudent().getName())
+                 .currentGrade(enrollment.getGrade());
+
+                if (enrollment.getStatus() == EnrollmentStatus.WITHDRAWN) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Student has withdrawn from this section").build());
+                    invalid++;
+                    continue;
+                }
+
+                if (rawGrade == null || rawGrade.isBlank()) {
+                    rows.add(b.status(BulkGradeRowResult.Status.SKIPPED)
+                            .error("Grade cell left blank").build());
+                    skipped++;
+                    continue;
+                }
+
+                Grade parsed = Grade.fromLabel(rawGrade);
+                if (parsed == null) {
+                    rows.add(b.status(BulkGradeRowResult.Status.INVALID)
+                            .error("Unrecognized grade '" + rawGrade + "'").build());
+                    invalid++;
+                    continue;
+                }
+
+                rows.add(b.parsedGrade(parsed)
+                        .status(BulkGradeRowResult.Status.VALID)
+                        .build());
+                validCount++;
+            }
+        } catch (IOException e) {
+            throw new BadRequestException("Failed to parse CSV: " + e.getMessage());
+        }
+
+        BulkGradeResult result = BulkGradeResult.builder()
+                .total(rows.size())
+                .valid(validCount)
+                .skipped(skipped)
+                .invalid(invalid)
+                .rows(rows)
+                .committed(false)
+                .appliedCount(0)
+                .build();
+
+        if (dryRun) {
+            return result;
+        }
+
+        // Commit every VALID row. INVALID rows are reported but skipped — the
+        // lecturer sees exactly which ones didn't apply in the preview table.
+        int applied = 0;
+        for (BulkGradeRowResult row : rows) {
+            if (row.getStatus() != BulkGradeRowResult.Status.VALID) continue;
+            Enrollment enrollment = bySrn.get(row.getSrn().trim().toUpperCase());
+            enrollment.setGrade(row.getParsedGrade());
+            enrollmentRepository.save(enrollment);
+            applied++;
+        }
+        result.setCommitted(true);
+        result.setAppliedCount(applied);
+        return result;
+    }
+
+    private static String columnCaseInsensitive(CSVRecord record, String name) {
+        for (String header : record.getParser().getHeaderMap().keySet()) {
+            if (header.trim().equalsIgnoreCase(name)) {
+                String v = record.get(header);
+                return v == null ? null : v.trim();
+            }
+        }
+        return null;
     }
 
     public TranscriptDTO transcript(Long studentId) {

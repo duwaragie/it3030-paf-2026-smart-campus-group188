@@ -11,6 +11,7 @@ import {
   type EnrollmentDTO,
   type Grade,
 } from '@/services/enrollmentService';
+import BulkGradeUploadModal from '../components/BulkGradeUploadModal';
 
 export default function LecturerCoursesPage() {
   const [sections, setSections] = useState<CourseSectionDTO[]>([]);
@@ -21,6 +22,7 @@ export default function LecturerCoursesPage() {
   const [savingGradeFor, setSavingGradeFor] = useState<number | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [releaseConfirm, setReleaseConfirm] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -157,6 +159,13 @@ export default function LecturerCoursesPage() {
                       Section {selectedSection.label} &bull; {selectedSection.semester} &bull; {selectedSection.credits} credits
                     </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setBulkUploadOpen(true)}
+                    className="h-9 px-4 text-xs font-semibold rounded-lg border border-gray-200 text-campus-800 hover:bg-gray-50 transition-colors"
+                  >
+                    ⤒ Bulk upload grades
+                  </button>
                   <button
                     onClick={() => setReleaseConfirm(true)}
                     disabled={releasing || gradedCount === 0}
@@ -164,6 +173,7 @@ export default function LecturerCoursesPage() {
                   >
                     {releasing ? 'Releasing...' : `Release all grades (course-wide)`}
                   </button>
+                  </div>
                 </div>
 
                 {loadingRoster ? (
@@ -280,6 +290,16 @@ export default function LecturerCoursesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {bulkUploadOpen && selectedSection && (
+        <BulkGradeUploadModal
+          sectionId={selectedSection.id}
+          sectionLabel={selectedSection.label}
+          courseCode={selectedSection.courseCode}
+          onClose={() => setBulkUploadOpen(false)}
+          onApplied={() => { void selectSection(selectedSection.id); }}
+        />
       )}
     </AppLayout>
   );
