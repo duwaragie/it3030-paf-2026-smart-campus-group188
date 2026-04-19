@@ -41,14 +41,21 @@ function pushStatusText(state: PushState, pushPrefOn: boolean): string | null {
 export default function NotificationPreferencesCard() {
   const [prefs, setPrefs] = useState<NotificationPreferenceDTO | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'email' | 'push' | null>(null);
+  const [saving, setSaving] = useState<'email' | 'push' | 'quiet' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushState>('default');
+  // Draft values for the time fields so users can edit freely and commit with Save.
+  const [draftStart, setDraftStart] = useState('');
+  const [draftEnd, setDraftEnd] = useState('');
 
   useEffect(() => {
     notificationService
       .getPreferences()
-      .then((res) => setPrefs(res.data))
+      .then((res) => {
+        setPrefs(res.data);
+        setDraftStart(res.data.quietHoursStart);
+        setDraftEnd(res.data.quietHoursEnd);
+      })
       .catch(() => setError('Failed to load preferences.'))
       .finally(() => setLoading(false));
 
@@ -105,8 +112,25 @@ export default function NotificationPreferencesCard() {
     }
   };
 
+  const saveQuiet = async (patch: Partial<Pick<NotificationPreferenceDTO, 'quietHoursEnabled' | 'quietHoursStart' | 'quietHoursEnd'>>) => {
+    if (!prefs) return;
+    const prev = prefs;
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    setSaving('quiet');
+    try {
+      await notificationService.updatePreferences(patch);
+    } catch {
+      setPrefs(prev);
+      setError('Failed to save quiet hours.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const statusMsg = prefs ? pushStatusText(pushState, prefs.push) : null;
   const pushDisabled = pushState === 'unsupported' || pushState === 'denied';
+  const quietSaving = saving === 'quiet';
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-6">
@@ -174,6 +198,73 @@ export default function NotificationPreferencesCard() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && prefs && (
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-semibold text-campus-900">Quiet hours</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Pause email & push during a daily window — they'll be delivered once quiet hours end. In-app still flows through so nothing is missed. Applies to scheduled announcements too.
+              </p>
+            </div>
+            <label className={`shrink-0 inline-flex items-center gap-2 ${quietSaving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+              <input
+                type="checkbox"
+                checked={prefs.quietHoursEnabled}
+                disabled={quietSaving}
+                onChange={(e) => void saveQuiet({ quietHoursEnabled: e.target.checked })}
+                className="w-5 h-5 rounded border-gray-300 text-campus-600 focus:ring-campus-500 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className={`text-xs font-semibold ${prefs.quietHoursEnabled ? 'text-campus-800' : 'text-gray-400'}`}>
+                {prefs.quietHoursEnabled ? 'On' : 'Off'}
+              </span>
+            </label>
+          </div>
+
+          {prefs.quietHoursEnabled && (() => {
+            const timesDirty =
+              draftStart !== prefs.quietHoursStart || draftEnd !== prefs.quietHoursEnd;
+            const timesValid = !!draftStart && !!draftEnd && draftStart !== draftEnd;
+            const onSaveTimes = async () => {
+              if (!timesDirty || !timesValid) return;
+              await saveQuiet({ quietHoursStart: draftStart, quietHoursEnd: draftEnd });
+            };
+            return (
+              <div className="mt-3 flex items-end gap-3">
+                <label className="flex-1">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">From</span>
+                  <input
+                    type="time"
+                    value={draftStart}
+                    disabled={quietSaving}
+                    onChange={(e) => setDraftStart(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:border-campus-500 focus:ring-1 focus:ring-campus-500 outline-none"
+                  />
+                </label>
+                <label className="flex-1">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Until</span>
+                  <input
+                    type="time"
+                    value={draftEnd}
+                    disabled={quietSaving}
+                    onChange={(e) => setDraftEnd(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:border-campus-500 focus:ring-1 focus:ring-campus-500 outline-none"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void onSaveTimes()}
+                  disabled={!timesDirty || !timesValid || quietSaving}
+                  className="h-[38px] px-4 text-xs font-semibold rounded-lg bg-campus-600 text-white hover:bg-campus-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {quietSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
