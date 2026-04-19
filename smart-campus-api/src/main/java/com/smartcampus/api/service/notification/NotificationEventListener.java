@@ -10,11 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/**
- * Subscribes to domain events from other modules (booking today; ticket, etc.
- * later) and converts them to notification requests. This is the only file
- * that has to change when a new event type starts producing notifications.
- */
+// Single place where domain events become notifications — the only file
+// that changes when a new event type should produce a notification.
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -37,7 +34,6 @@ public class NotificationEventListener {
                 .link("/bookings")
                 .build());
 
-        // Let admins know so they can review promptly.
         userRepository.findByRole(com.smartcampus.api.model.Role.ADMIN)
                 .forEach(admin -> dispatcher.dispatch(NotificationRequest.builder()
                         .recipient(admin)
@@ -86,9 +82,10 @@ public class NotificationEventListener {
     @EventListener
     public void onBookingCancelled(BookingEvents.BookingCancelled event) {
         Booking b = event.booking();
+        // Skip self-notifications when a user cancels their own booking.
         boolean cancelledByAdmin = event.actorId() != null
                 && !event.actorId().equals(b.getUser().getId());
-        if (!cancelledByAdmin) return; // user cancelling their own booking doesn't need a self-notification
+        if (!cancelledByAdmin) return;
 
         dispatcher.dispatch(NotificationRequest.builder()
                 .recipient(b.getUser())

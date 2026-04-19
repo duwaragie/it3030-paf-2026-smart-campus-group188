@@ -18,7 +18,6 @@ public interface CourseSectionRepository extends JpaRepository<CourseSection, Lo
 
     Optional<CourseSection> findByOfferingIdAndLabel(Long offeringId, String label);
 
-    /** Has the given user been assigned as lecturer to any section of this offering? */
     @Query("SELECT COUNT(s) > 0 FROM CourseSection s " +
            "WHERE s.offering.id = :offeringId AND s.lecturer.id = :userId")
     boolean isLecturerOnOffering(@Param("offeringId") Long offeringId,

@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// Defaults (email ON, push OFF) are applied in-memory so the DB only stores
+// rows for users who've deviated.
 @Service
 @RequiredArgsConstructor
 public class NotificationPreferenceService {

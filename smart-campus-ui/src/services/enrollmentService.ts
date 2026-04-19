@@ -67,6 +67,18 @@ export interface TranscriptDTO {
   entries: EnrollmentDTO[];
 }
 
+export interface GradeChangeDTO {
+  id: number;
+  previousGrade?: Grade | null;
+  previousGradeLabel?: string | null;
+  newGrade?: Grade | null;
+  newGradeLabel?: string | null;
+  wasReleased: boolean;
+  changedByName?: string | null;
+  reason?: string | null;
+  changedAt: string;
+}
+
 export type BulkGradeRowStatus = 'VALID' | 'SKIPPED' | 'INVALID';
 
 export interface BulkGradeRowResult {
@@ -101,8 +113,12 @@ export const enrollmentService = {
   roster: (sectionId: number) =>
     api.get<EnrollmentDTO[]>(`/enrollments/section/${sectionId}`),
 
-  setGrade: (enrollmentId: number, grade: Grade) =>
-    api.put<EnrollmentDTO>(`/enrollments/${enrollmentId}/grade`, { grade }),
+  setGrade: (enrollmentId: number, grade: Grade, reason?: string) =>
+    api.put<EnrollmentDTO>(`/enrollments/${enrollmentId}/grade`,
+      reason ? { grade, reason } : { grade }),
+
+  gradeHistory: (enrollmentId: number) =>
+    api.get<GradeChangeDTO[]>(`/enrollments/${enrollmentId}/history`),
 
   transcript: () => api.get<TranscriptDTO>('/transcripts/me'),
 

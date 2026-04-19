@@ -32,7 +32,7 @@ public class CreateCourseOfferingRequest {
     @DecimalMax(value = "12.0", message = "Credits cannot exceed 12")
     private Double credits;
 
-    /** Comma-separated course codes required before enrolling. */
+    // Comma-separated course codes.
     private String prerequisites;
 
     private CourseOfferingStatus status;

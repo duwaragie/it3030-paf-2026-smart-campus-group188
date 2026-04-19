@@ -12,6 +12,8 @@ import {
   type Grade,
 } from '@/services/enrollmentService';
 import BulkGradeUploadModal from '../components/BulkGradeUploadModal';
+import GradeHistoryModal from '../components/GradeHistoryModal';
+import ReleasedGradeReasonModal from '../components/ReleasedGradeReasonModal';
 
 export default function LecturerCoursesPage() {
   const [sections, setSections] = useState<CourseSectionDTO[]>([]);
@@ -23,6 +25,11 @@ export default function LecturerCoursesPage() {
   const [releasing, setReleasing] = useState(false);
   const [releaseConfirm, setReleaseConfirm] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [historyFor, setHistoryFor] = useState<EnrollmentDTO | null>(null);
+  const [pendingReleasedEdit, setPendingReleasedEdit] = useState<{
+    enrollment: EnrollmentDTO;
+    newGrade: Grade;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -61,12 +68,28 @@ export default function LecturerCoursesPage() {
     }
   };
 
-  const handleSetGrade = async (enrollment: EnrollmentDTO, grade: Grade) => {
+  const handleSetGrade = (enrollment: EnrollmentDTO, grade: Grade) => {
+    if (enrollment.gradeReleased) {
+      setPendingReleasedEdit({ enrollment, newGrade: grade });
+      return;
+    }
+    void saveGrade(enrollment, grade);
+  };
+
+  const saveGrade = async (
+    enrollment: EnrollmentDTO,
+    grade: Grade,
+    reason?: string
+  ) => {
     try {
       setSavingGradeFor(enrollment.id);
       setError(null);
-      const res = await enrollmentService.setGrade(enrollment.id, grade);
+      const res = await enrollmentService.setGrade(enrollment.id, grade, reason);
       setRoster((prev) => prev.map((e) => (e.id === enrollment.id ? res.data : e)));
+      if (enrollment.gradeReleased) {
+        setSuccess('Grade updated. The student has been notified.');
+      }
+      setPendingReleasedEdit(null);
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } };
       setError(e.response?.data?.message || 'Failed to save grade.');
@@ -217,7 +240,7 @@ export default function LecturerCoursesPage() {
                                 <select
                                   value={e.grade || ''}
                                   onChange={(ev) => handleSetGrade(e, ev.target.value as Grade)}
-                                  disabled={savingGradeFor === e.id || e.gradeReleased}
+                                  disabled={savingGradeFor === e.id}
                                   className="text-sm h-8 px-2 rounded border border-gray-200 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-campus-200 disabled:bg-gray-50 disabled:text-gray-400"
                                 >
                                   <option value="">Not set</option>
@@ -232,13 +255,21 @@ export default function LecturerCoursesPage() {
                               )}
                             </td>
                             <td className="px-5 py-3">
-                              {e.gradeReleased ? (
-                                <span className="text-xs font-semibold text-emerald-600">Released</span>
-                              ) : e.grade ? (
-                                <span className="text-xs text-amber-600">Pending release</span>
-                              ) : (
-                                <span className="text-xs text-gray-300">Not graded</span>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {e.gradeReleased ? (
+                                  <span className="text-xs font-semibold text-emerald-600">Released</span>
+                                ) : e.grade ? (
+                                  <span className="text-xs text-amber-600">Pending release</span>
+                                ) : (
+                                  <span className="text-xs text-gray-300">Not graded</span>
+                                )}
+                                <button
+                                  onClick={() => setHistoryFor(e)}
+                                  className="text-[11px] font-semibold text-campus-600 hover:text-campus-800 underline"
+                                >
+                                  History
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -299,6 +330,31 @@ export default function LecturerCoursesPage() {
           courseCode={selectedSection.courseCode}
           onClose={() => setBulkUploadOpen(false)}
           onApplied={() => { void selectSection(selectedSection.id); }}
+        />
+      )}
+
+      {historyFor && (
+        <GradeHistoryModal
+          enrollmentId={historyFor.id}
+          studentName={historyFor.studentName}
+          courseCode={historyFor.courseCode}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
+
+      {pendingReleasedEdit && (
+        <ReleasedGradeReasonModal
+          enrollment={pendingReleasedEdit.enrollment}
+          newGrade={pendingReleasedEdit.newGrade}
+          busy={savingGradeFor === pendingReleasedEdit.enrollment.id}
+          onCancel={() => setPendingReleasedEdit(null)}
+          onConfirm={(reason) => {
+            void saveGrade(
+              pendingReleasedEdit.enrollment,
+              pendingReleasedEdit.newGrade,
+              reason
+            );
+          }}
         />
       )}
     </AppLayout>

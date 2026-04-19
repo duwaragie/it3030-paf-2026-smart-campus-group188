@@ -3,6 +3,7 @@ package com.smartcampus.api.controller;
 import com.smartcampus.api.dto.BulkGradeResult;
 import com.smartcampus.api.dto.EnrollRequest;
 import com.smartcampus.api.dto.EnrollmentDTO;
+import com.smartcampus.api.dto.GradeChangeDTO;
 import com.smartcampus.api.dto.SetGradeRequest;
 import com.smartcampus.api.dto.TranscriptDTO;
 import com.smartcampus.api.exception.BadRequestException;
@@ -73,7 +74,17 @@ public class EnrollmentController {
             @PathVariable Long id,
             @Valid @RequestBody SetGradeRequest request) {
         User actor = (User) authentication.getPrincipal();
-        return ResponseEntity.ok(enrollmentService.setGrade(id, request.getGrade(), actor));
+        return ResponseEntity.ok(enrollmentService.setGrade(
+                id, request.getGrade(), request.getReason(), actor));
+    }
+
+    // GET /api/enrollments/{id}/history  (lecturer on offering, admin, or owning student)
+    @GetMapping("/api/enrollments/{id}/history")
+    public ResponseEntity<List<GradeChangeDTO>> gradeHistory(
+            Authentication authentication,
+            @PathVariable Long id) {
+        User actor = (User) authentication.getPrincipal();
+        return ResponseEntity.ok(enrollmentService.gradeHistory(id, actor));
     }
 
     // POST /api/course-offerings/{offeringId}/release-grades  (LECTURER on offering / ADMIN)

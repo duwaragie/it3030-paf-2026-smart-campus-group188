@@ -22,13 +22,9 @@ import java.security.KeyPairGenerator;
 import java.security.Security;
 import java.util.Base64;
 
-/**
- * Holds the VAPID identity used to sign Web Push requests. On first boot,
- * if keys aren't provided via env or application.yml, generates a P-256
- * keypair and persists it to {@code .vapid-keys.json} (git-ignored) so the
- * same keys are reused across restarts — swapping keys invalidates every
- * existing browser subscription.
- */
+// VAPID identity for Web Push. Generates + persists a keypair on first boot
+// if none is configured; reusing them across restarts is critical because
+// swapping keys invalidates every existing browser subscription.
 @Slf4j
 @Configuration
 @Getter
@@ -107,8 +103,8 @@ public class VapidConfig {
     }
 
     private static String encodePrivateKey(ECPrivateKey key) {
+        // P-256 scalar: strip leading zero / left-pad to fixed 32 bytes.
         byte[] s = key.getD().toByteArray();
-        // Big-endian, strip leading zero byte if present, left-pad to 32.
         if (s.length > 32) s = java.util.Arrays.copyOfRange(s, s.length - 32, s.length);
         if (s.length < 32) {
             byte[] padded = new byte[32];

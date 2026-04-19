@@ -9,18 +9,14 @@ import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Subscription;
 import org.apache.http.HttpResponse;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/**
- * Delivers Web Push notifications to every subscription the user has registered.
- * Expired / invalid subscriptions (HTTP 404 or 410) are cleaned up automatically.
- *
- * The payload is a minimal JSON blob the service worker reads to build the
- * visible notification on the client.
- */
+// Expired subscriptions (HTTP 404/410) are dropped automatically; the
+// payload is a minimal JSON blob the service worker builds a Notification from.
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,6 +31,7 @@ public class PushNotificationChannel implements NotificationChannel {
     }
 
     @Override
+    @Async
     @Transactional
     public void send(NotificationRequest request) {
         List<PushSubscription> subs = subscriptionRepository
@@ -64,7 +61,6 @@ public class PushNotificationChannel implements NotificationChannel {
         }
     }
 
-    /** Minimal JSON so the service worker can render a {@code showNotification()}. */
     private String buildPayload(NotificationRequest r) {
         return "{"
                 + "\"title\":" + jsonString(r.getTitle()) + ","

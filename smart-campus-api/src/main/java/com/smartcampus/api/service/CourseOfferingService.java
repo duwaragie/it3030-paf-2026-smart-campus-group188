@@ -122,7 +122,6 @@ public class CourseOfferingService {
         return offerings.stream().map(this::toDTO).toList();
     }
 
-    /** Offerings where the given user is the lecturer on at least one section. */
     public List<CourseOfferingDTO> listByLecturer(Long lecturerId) {
         Set<Long> offeringIds = courseSectionRepository.findByLecturerId(lecturerId).stream()
                 .map(s -> s.getOffering().getId())

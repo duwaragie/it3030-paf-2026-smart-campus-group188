@@ -9,10 +9,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * A notification composed in advance and fanned out at scheduledAt by a cron job.
- * Once dispatched, sentAt is set and the row is no longer picked up.
- */
+// Cron picks up rows where sentAt IS NULL and scheduledAt has passed.
 @Entity
 @Table(name = "scheduled_announcements",
         indexes = @Index(name = "idx_sa_due", columnList = "sentAt, scheduledAt"))
@@ -32,7 +29,6 @@ public class ScheduledAnnouncement {
     @Column(nullable = false, length = 1000)
     private String message;
 
-    /** Deep link into the app (optional). */
     @Column(length = 255)
     private String link;
 
@@ -47,11 +43,9 @@ public class ScheduledAnnouncement {
     @Column(nullable = false)
     private LocalDateTime scheduledAt;
 
-    /** Null until the cron has dispatched this announcement. */
     @Column
     private LocalDateTime sentAt;
 
-    /** How many users received the notification (for admin listing). */
     @Column
     private Integer recipientCount;
 

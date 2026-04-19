@@ -22,7 +22,6 @@ public class PushSubscriptionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
-        // Re-subscription from the same browser — update in place.
         PushSubscription sub = repository.findByEndpoint(req.getEndpoint())
                 .orElseGet(() -> PushSubscription.builder().endpoint(req.getEndpoint()).build());
         sub.setUser(user);

@@ -38,7 +38,7 @@ public class CourseOffering {
     @Column(nullable = false)
     private Double credits;
 
-    /** Comma-separated course codes, e.g. "IT2030,IT2040". */
+    // Comma-separated course codes, e.g. "IT2030,IT2040".
     @Column(length = 500)
     private String prerequisites;
 

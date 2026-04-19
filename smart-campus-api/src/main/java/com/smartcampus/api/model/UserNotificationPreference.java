@@ -6,11 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Per-user channel toggles. In-app is always on (not stored) — users can't
- * disable it, so notifications always reach them somewhere. Email and push
- * are opt-in/out.
- */
+// Only email + push are toggleable; in-app is always on and not stored.
 @Entity
 @Table(name = "user_notification_preferences",
         uniqueConstraints = @UniqueConstraint(columnNames = "user_id"))

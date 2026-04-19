@@ -30,14 +30,10 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         
         CustomOAuth2User oauth2User = (CustomOAuth2User) authentication.getPrincipal();
         User user = oauth2User.getUser();
-        
-        // Generate JWT access token
+
         String token = jwtService.generateToken(user);
-        
-        // Generate Refresh token
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
-        
-        // Build redirect URL with both tokens
+
         String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("token", token)
                 .queryParam("refreshToken", refreshToken.getToken())

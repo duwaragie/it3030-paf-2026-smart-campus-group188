@@ -10,10 +10,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Persists the notification and pushes it over WebSocket to
- * /user/{id}/queue/notifications so the bell updates in real time.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -53,7 +49,6 @@ public class InAppNotificationChannel implements NotificationChannel {
                     .createdAt(saved.getCreatedAt())
                     .build();
 
-            // User destination — delivered only to sessions authenticated as this user.
             messagingTemplate.convertAndSendToUser(
                     request.getRecipient().getId().toString(),
                     "/queue/notifications",

@@ -6,6 +6,7 @@ export type NotificationType =
   | 'WAITLIST_PROMOTED'
   | 'ENROLLMENT_WITHDRAWN'
   | 'GRADE_RELEASED'
+  | 'GRADE_UPDATED'
   | 'COURSE_STATUS_CHANGED'
   | 'BOOKING_CREATED'
   | 'BOOKING_APPROVED'
@@ -33,10 +34,7 @@ export interface NotificationDTO {
   createdAt: string;
 }
 
-/**
- * Global channel toggles. In-app is not user-toggleable (always on) — the
- * backend guarantees at least one delivery method, so it's not in the DTO.
- */
+// In-app is always on and not part of the DTO.
 export interface NotificationPreferenceDTO {
   email: boolean;
   push: boolean;

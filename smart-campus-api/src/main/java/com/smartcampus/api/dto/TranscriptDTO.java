@@ -16,15 +16,8 @@ public class TranscriptDTO {
     private String studentName;
     private String studentRegistrationNumber;
 
-    /** GPA on a 4.0 scale across all COMPLETED courses with released grades. */
     private Double gpa;
-
-    /** Sum of credits across all COMPLETED courses with released grades. */
     private Double creditsEarned;
-
-    /** Number of completed courses counted in GPA. */
     private Integer coursesCompleted;
-
-    /** All enrollments, in reverse-chronological order. */
     private List<EnrollmentDTO> entries;
 }

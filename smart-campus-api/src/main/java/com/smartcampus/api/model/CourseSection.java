@@ -31,7 +31,6 @@ public class CourseSection {
     @JoinColumn(name = "lecturer_id")
     private User lecturer;
 
-    /** Short display name for the section, e.g. "Group A" or "Section 01". */
     @Column(nullable = false, length = 32)
     private String label;
 

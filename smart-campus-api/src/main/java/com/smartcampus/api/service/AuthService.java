@@ -45,7 +45,6 @@ public class AuthService {
                     throw new RuntimeException("Email already registered and verified. Please login.");
                 }
             }
-            // For unverified user, we can just save it again
         } else {
             user = new User();
             user.setName(request.getName());
@@ -53,10 +52,10 @@ public class AuthService {
             user.setRole(Role.STUDENT);
             user.setAuthProvider(AuthProvider.LOCAL);
             user.setEmailVerified(false);
-            user = userRepository.save(user); // Save to get an ID for OTP token
+            user = userRepository.save(user); // need the ID before the OTP row
         }
 
-        // Send OTP with the temp password to be applied upon verification
+        // Password is stored with the OTP and applied only on successful verification.
         otpService.generateAndSendOtp(user, hashedPassword);
     }
 
@@ -71,21 +70,17 @@ public class AuthService {
         Optional<com.smartcampus.api.model.OtpToken> tokenOpt = otpService.verifyOtpAndGetToken(user, otp);
         if (tokenOpt.isPresent()) {
             com.smartcampus.api.model.OtpToken token = tokenOpt.get();
-            
-            // Apply temp password
             if (token.getTempPassword() != null) {
                 user.setPassword(token.getTempPassword());
             }
-
             user.setEmailVerified(true);
-            
-            // Adjust auth provider if it was originally Google
+
             if (user.getAuthProvider() == AuthProvider.GOOGLE) {
                 user.setAuthProvider(AuthProvider.BOTH);
             } else if (user.getAuthProvider() == null) {
-                 user.setAuthProvider(AuthProvider.LOCAL);
+                user.setAuthProvider(AuthProvider.LOCAL);
             }
-            
+
             userRepository.save(user);
         } else {
             throw new RuntimeException("Invalid or expired OTP");
@@ -93,7 +88,6 @@ public class AuthService {
     }
 
     public Map<String, Object> login(LoginRequest request) {
-        // Check if user exists before attempting authentication
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("No account found with this email address."));
 

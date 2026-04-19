@@ -22,11 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Creates, lists, cancels and dispatches scheduled broadcast announcements.
- * A cron job every minute picks up rows whose scheduledAt has passed and
- * fans them out to every targeted user via the notification dispatcher.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -69,12 +64,7 @@ public class ScheduledAnnouncementService {
         repository.delete(announcement);
     }
 
-    /**
-     * Cron: fires at the top of every wall-clock minute (:00 second mark)
-     * and dispatches any announcements whose scheduledAt has passed.
-     * Max latency is ~1 minute — predictable for demos and good enough for
-     * a 50-user scale.
-     */
+    // Fires at :00 of every wall-clock minute; max delivery latency ~1 min.
     @Scheduled(cron = "0 * * * * *")
     @Transactional
     public void dispatchDue() {
