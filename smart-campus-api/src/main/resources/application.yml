@@ -68,3 +68,10 @@ app:
     admin-employee-id: ${SEED_ADMIN_EMPLOYEE_ID:EMP-0001}
   upload:
     tickets-dir: ./uploads/tickets
+  ai:
+    groq:
+      api-key: ${GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai/v1
+      model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+      max-tool-iterations: 4
+      request-timeout-ms: 30000
