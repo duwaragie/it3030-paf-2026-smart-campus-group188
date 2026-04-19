@@ -35,9 +35,13 @@ export interface NotificationDTO {
 }
 
 // In-app is always on and not part of the DTO.
+// Quiet hours suppress push only; times are "HH:mm" strings.
 export interface NotificationPreferenceDTO {
   email: boolean;
   push: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
 }
 
 export const notificationService = {
