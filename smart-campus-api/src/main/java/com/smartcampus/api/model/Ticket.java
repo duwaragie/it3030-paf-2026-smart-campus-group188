@@ -60,6 +60,8 @@ public class Ticket {
     @JoinColumn(name = "assigned_to_id")
     private User assignedTo;
 
+    private LocalDateTime assignedAt;
+
     @Builder.Default
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TicketImage> images = new ArrayList<>();

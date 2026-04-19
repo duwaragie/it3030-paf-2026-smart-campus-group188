@@ -3,5 +3,6 @@ package com.smartcampus.api.model;
 public enum Role {
     STUDENT,
     ADMIN,
-    LECTURER
+    LECTURER,
+    TECHNICAL_STAFF
 }

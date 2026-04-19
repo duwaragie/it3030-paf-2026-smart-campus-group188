@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,7 +47,8 @@ public class TicketService {
 
     public List<TicketResponseDTO> getAllTickets(User currentUser) {
         List<Ticket> tickets;
-        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.LECTURER) {
+        if (currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.LECTURER
+                || currentUser.getRole() == Role.TECHNICAL_STAFF) {
             tickets = ticketRepository.findAllByOrderByCreatedAtDesc();
         } else {
             tickets = ticketRepository.findByCreatedByOrderByCreatedAtDesc(currentUser);
@@ -57,7 +59,7 @@ public class TicketService {
     public TicketResponseDTO getTicketById(Long id, User currentUser) {
         Ticket ticket = ticketRepository.findById(id)
                 .orElseThrow(() -> new TicketNotFoundException(id));
-        if (currentUser.getRole() == Role.STUDENT && !ticket.getCreatedBy().getId().equals(currentUser.getId())) {
+        if ((currentUser.getRole() == Role.STUDENT) && !ticket.getCreatedBy().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("You do not have permission to view this ticket");
         }
         return convertToDTO(ticket);
@@ -86,30 +88,35 @@ public class TicketService {
     }
 
     private void validateStatusTransition(TicketStatus current, TicketStatus next, Role role) {
+        boolean isAdmin = role == Role.ADMIN;
+        boolean isTechnician = role == Role.TECHNICAL_STAFF;
+
         if (next == TicketStatus.REJECTED) {
-            if (role != Role.ADMIN) throw new AccessDeniedException("Only admins can reject tickets");
+            if (!isAdmin) throw new AccessDeniedException("Only admins can reject tickets");
             return;
         }
         if (next == TicketStatus.CLOSED) {
-            if (role != Role.ADMIN) throw new AccessDeniedException("Only admins can close tickets");
+            if (!isAdmin) throw new AccessDeniedException("Only admins can close tickets");
             if (current != TicketStatus.RESOLVED)
                 throw new IllegalArgumentException("Ticket must be RESOLVED before it can be closed");
             return;
         }
         if (next == TicketStatus.IN_PROGRESS) {
-            if (role == Role.STUDENT) throw new AccessDeniedException("Students cannot update ticket status");
+            if (!isAdmin && !isTechnician) throw new AccessDeniedException("Only technicians and admins can update ticket status");
             if (current != TicketStatus.OPEN)
                 throw new IllegalArgumentException("Ticket must be OPEN to move to IN_PROGRESS");
             return;
         }
         if (next == TicketStatus.RESOLVED) {
-            if (role == Role.STUDENT) throw new AccessDeniedException("Students cannot resolve tickets");
+            if (!isAdmin && !isTechnician) throw new AccessDeniedException("Only technicians and admins can resolve tickets");
             if (current != TicketStatus.IN_PROGRESS)
                 throw new IllegalArgumentException("Ticket must be IN_PROGRESS before it can be resolved");
             return;
         }
         throw new IllegalArgumentException("Invalid status transition from " + current + " to " + next);
     }
+
+    private static final int MAX_DAILY_ASSIGNMENTS = 5;
 
     public TicketResponseDTO assignTicket(Long id, TicketAssignDTO dto, User currentUser) {
         if (currentUser.getRole() != Role.ADMIN) {
@@ -119,7 +126,17 @@ public class TicketService {
                 .orElseThrow(() -> new TicketNotFoundException(id));
         User assignee = userRepository.findById(dto.getAssignedToId())
                 .orElseThrow(() -> new UserNotFoundException(dto.getAssignedToId()));
+
+        LocalDateTime dayStart = LocalDateTime.now().toLocalDate().atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1);
+        long todayCount = ticketRepository.countAssignedToday(assignee, dayStart, dayEnd);
+        if (todayCount >= MAX_DAILY_ASSIGNMENTS) {
+            throw new IllegalArgumentException(
+                    assignee.getName() + " already has " + todayCount + " tickets assigned today (daily limit: " + MAX_DAILY_ASSIGNMENTS + ").");
+        }
+
         ticket.setAssignedTo(assignee);
+        ticket.setAssignedAt(LocalDateTime.now());
         return convertToDTO(ticketRepository.save(ticket));
     }
 
@@ -271,7 +288,8 @@ public class TicketService {
                 imageIds,
                 comments,
                 ticket.getCreatedAt(),
-                ticket.getUpdatedAt()
+                ticket.getUpdatedAt(),
+                ticket.getAssignedAt()
         );
     }
 

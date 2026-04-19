@@ -33,4 +33,5 @@ public class TicketResponseDTO {
     private List<TicketCommentResponseDTO> comments;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime assignedAt;
 }

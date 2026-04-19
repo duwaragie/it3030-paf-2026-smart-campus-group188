@@ -15,7 +15,7 @@ export interface CreateUserPayload {
   name: string;
   email: string;
   password: string;
-  role: 'LECTURER' | 'ADMIN';
+  role: 'LECTURER' | 'ADMIN' | 'TECHNICAL_STAFF';
   employeeId: string;
 }
 
