@@ -1,7 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { aiChatService, type ChatMessage } from '@/services/aiChatService';
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/store/authStore';
+
+const markdownComponents = {
+  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p className="mb-1.5 last:mb-0" {...props} />
+  ),
+  ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
+    <ul className="mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0" {...props} />
+  ),
+  ol: (props: React.HTMLAttributes<HTMLOListElement>) => (
+    <ol className="mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0" {...props} />
+  ),
+  li: (props: React.HTMLAttributes<HTMLLIElement>) => (
+    <li className="leading-snug" {...props} />
+  ),
+  strong: (props: React.HTMLAttributes<HTMLElement>) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  em: (props: React.HTMLAttributes<HTMLElement>) => <em className="italic" {...props} />,
+  code: (props: React.HTMLAttributes<HTMLElement>) => (
+    <code
+      className="rounded bg-blue-50 px-1 py-0.5 font-mono text-[0.8em] text-blue-700"
+      {...props}
+    />
+  ),
+  h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 className="mb-1 mt-1.5 text-sm font-semibold first:mt-0" {...props} />
+  ),
+  h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 className="mb-1 mt-1.5 text-sm font-semibold first:mt-0" {...props} />
+  ),
+  h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 className="mb-1 mt-1.5 text-sm font-semibold first:mt-0" {...props} />
+  ),
+  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a className="text-blue-600 underline hover:text-blue-700" target="_blank" rel="noopener noreferrer" {...props} />
+  ),
+};
 
 interface Props {
   onClose: () => void;
@@ -105,7 +144,9 @@ export default function ChatPanel({ onClose }: Props) {
         {isEmpty && !sending && (
           <div className="flex flex-col gap-3">
             <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-sm text-foreground ring-1 ring-blue-100 shadow-sm">
-              {greeting}
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {greeting}
+              </ReactMarkdown>
             </div>
             <div className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Try one of these
@@ -124,18 +165,25 @@ export default function ChatPanel({ onClose }: Props) {
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === 'user'
-                ? 'ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-gradient-to-br from-sky-500 to-blue-600 px-3.5 py-2 text-sm text-white shadow-sm animate-fade-in'
-                : 'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm text-foreground ring-1 ring-blue-100 shadow-sm animate-fade-in'
-            }
-          >
-            {m.content}
-          </div>
-        ))}
+        {messages.map((m, i) =>
+          m.role === 'user' ? (
+            <div
+              key={i}
+              className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-gradient-to-br from-sky-500 to-blue-600 px-3.5 py-2 text-sm text-white shadow-sm animate-fade-in"
+            >
+              {m.content}
+            </div>
+          ) : (
+            <div
+              key={i}
+              className="max-w-[85%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm text-foreground ring-1 ring-blue-100 shadow-sm animate-fade-in"
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {m.content}
+              </ReactMarkdown>
+            </div>
+          )
+        )}
 
         {sending && (
           <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-sm ring-1 ring-blue-100 shadow-sm">
