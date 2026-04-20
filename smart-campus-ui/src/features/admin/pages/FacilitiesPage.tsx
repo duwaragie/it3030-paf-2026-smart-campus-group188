@@ -593,7 +593,7 @@ export default function FacilitiesPage() {
                               type="file"
                               accept="image/png, image/jpeg"
                               onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
-                              className="w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-white file:text-campus-700 file:border-gray-200 file:border hover:file:bg-gray-50 cursor-pointer"
+                              className="w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-white file:text-campus-700 file:border-gray-200 hover:file:bg-gray-50 cursor-pointer"
                             />
                           </div>
                         ) : (
