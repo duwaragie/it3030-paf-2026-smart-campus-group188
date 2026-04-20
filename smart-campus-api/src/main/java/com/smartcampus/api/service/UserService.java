@@ -21,9 +21,10 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AccountSetupService accountSetupService;
 
     public User findByEmail(String email) {
-        return userRepository.findByEmail(email)
+        return userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new UserNotFoundException("email", email));
     }
 
@@ -164,7 +165,7 @@ public class UserService {
     }
 
     public UserDTO createUser(CreateUserRequest request) {
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+        if (userRepository.findByEmailIgnoreCase(request.getEmail()).isPresent()) {
             throw new RuntimeException("An account with this email already exists.");
         }
         if (request.getRole() == Role.STUDENT) {
@@ -180,11 +181,12 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
         user.setAuthProvider(AuthProvider.LOCAL);
-        user.setEmailVerified(true);
+        user.setEmailVerified(false);
         user.setEmployeeId(employeeId);
-        return convertToDTO(userRepository.save(user));
+        User saved = userRepository.save(user);
+        accountSetupService.issueInvite(saved);
+        return convertToDTO(saved);
     }
 }
