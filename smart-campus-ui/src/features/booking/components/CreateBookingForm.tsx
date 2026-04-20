@@ -101,11 +101,13 @@ export function CreateBookingForm({ resourceId, resourceName, editingBooking, on
     const timer = setTimeout(() => {
       (async () => {
         try {
-          // Convert datetime-local to ISO string: "2024-01-20T14:30" → "2024-01-20T14:30:00"
-          const start = new Date(`${startTime}:00`).toISOString();
-          const end = new Date(`${endTime}:00`).toISOString();
+          // Send the raw datetime-local value with seconds appended, matching how the
+          // booking body is serialized. LocalDateTime on the server can't parse the
+          // trailing Z from toISOString().
+          const start = `${startTime}:00`;
+          const end = `${endTime}:00`;
           const excludeId = isEditMode ? editingBooking?.id : undefined;
-          
+
           const response = await bookingService.checkConflicts(
             Number(selectedResourceId),
             start,
@@ -120,8 +122,7 @@ export function CreateBookingForm({ resourceId, resourceName, editingBooking, on
           } else {
             setConflictWarning(null);
           }
-        } catch (err) {
-          // Silently fail on conflict check errors
+        } catch {
           setConflictWarning(null);
         }
       })();

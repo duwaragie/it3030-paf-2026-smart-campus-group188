@@ -2,8 +2,6 @@ package com.smartcampus.api.service;
 
 import com.smartcampus.api.dto.BookingDTO;
 import com.smartcampus.api.dto.CreateBookingRequest;
-import com.smartcampus.api.dto.ApproveBookingRequest;
-import com.smartcampus.api.dto.RejectBookingRequest;
 import com.smartcampus.api.dto.ConflictProbeResponse;
 import com.smartcampus.api.event.BookingEvents;
 import com.smartcampus.api.exception.ResourceNotFoundException;
@@ -18,6 +16,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -263,9 +263,9 @@ public class BookingService {
         booking.setEndTime(request.getEndTime());
         booking.setPurpose(request.getPurpose());
         booking.setExpectedAttendees(request.getExpectedAttendees());
-        
-        // If editing a REJECTED booking, reset to PENDING
-        if (booking.getStatus() == BookingStatus.REJECTED) {
+
+        boolean wasRejected = booking.getStatus() == BookingStatus.REJECTED;
+        if (wasRejected) {
             booking.setStatus(BookingStatus.PENDING);
             booking.setRejectionReason(null);
             booking.setApprovedBy(null);
@@ -273,6 +273,9 @@ public class BookingService {
         }
 
         booking = bookingRepository.save(booking);
+        if (wasRejected) {
+            eventPublisher.publishEvent(new BookingEvents.BookingResubmitted(booking));
+        }
         return convertToDTO(booking);
     }
 
@@ -331,7 +334,7 @@ public class BookingService {
         booking.setCancelledBy(user);
 
         booking = bookingRepository.save(booking);
-        eventPublisher.publishEvent(new BookingEvents.BookingCancelled(booking, userId));
+        eventPublisher.publishEvent(new BookingEvents.BookingCancelled(booking, userId, null));
         return convertToDTO(booking);
     }
 
@@ -355,7 +358,7 @@ public class BookingService {
         booking.setAdminCancelReason(reason);
 
         booking = bookingRepository.save(booking);
-        eventPublisher.publishEvent(new BookingEvents.BookingCancelled(booking, adminId));
+        eventPublisher.publishEvent(new BookingEvents.BookingCancelled(booking, adminId, reason));
         return convertToDTO(booking);
     }
 
@@ -391,10 +394,10 @@ public class BookingService {
     }
 
     /**
-     * Scheduled job to auto-complete approved bookings whose time has passed
-     * Runs every 30 minutes (1800000 milliseconds)
+     * Scheduled job to auto-complete approved bookings whose time has passed.
+     * Runs every minute so a booking flips to COMPLETED within ~60s of its end time.
      */
-    @Scheduled(fixedRate = 1800000)
+    @Scheduled(fixedRate = 60000)
     public void autoCompleteBookings() {
         try {
             LocalDateTime now = LocalDateTime.now();
@@ -403,8 +406,9 @@ public class BookingService {
             for (Booking booking : completable) {
                 booking.setStatus(BookingStatus.COMPLETED);
                 booking.setCompletedAt(now);
-                bookingRepository.save(booking);
-                log.info("Auto-completed booking {} at {}", booking.getId(), now);
+                Booking saved = bookingRepository.save(booking);
+                eventPublisher.publishEvent(new BookingEvents.BookingCompleted(saved));
+                log.info("Auto-completed booking {} at {}", saved.getId(), now);
             }
             
             if (!completable.isEmpty()) {
@@ -416,10 +420,19 @@ public class BookingService {
     }
 
     /**
-     * Convert Booking entity to DTO with permission flags
+     * Convert Booking entity to DTO with permission flags based on the current security context.
      */
     private BookingDTO convertToDTO(Booking booking) {
-        return convertToDTO(booking, null);
+        return convertToDTO(booking, currentUserOrNull());
+    }
+
+    private User currentUserOrNull() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        return (principal instanceof User u) ? u : null;
     }
 
     /**
@@ -446,6 +459,10 @@ public class BookingService {
                 .requestedAt(booking.getRequestedAt())
                 .updatedAt(booking.getUpdatedAt())
                 .approvedAt(booking.getApprovedAt())
+                .cancelledAt(booking.getCancelledAt())
+                .cancelledById(booking.getCancelledBy() != null ? booking.getCancelledBy().getId() : null)
+                .cancelledByName(booking.getCancelledBy() != null ? booking.getCancelledBy().getName() : null)
+                .adminCancelReason(booking.getAdminCancelReason())
                 .completedAt(booking.getCompletedAt());
 
         // Compute permission flags if authenticated user is provided

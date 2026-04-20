@@ -15,6 +15,7 @@ public enum NotificationType {
     BOOKING_APPROVED,
     BOOKING_REJECTED,
     BOOKING_CANCELLED,
+    BOOKING_COMPLETED,
 
     // Tickets / incidents (wired when that module lands)
     TICKET_CREATED,
