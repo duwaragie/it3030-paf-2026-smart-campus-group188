@@ -29,4 +29,10 @@ export const authService = {
 
   getMe: () =>
     api.get<User>('/auth/me'),
+
+  validateAccountSetup: (token: string) =>
+    api.get<{ email: string; name: string; role: string }>('/account-setup/validate', { params: { token } }),
+
+  completeAccountSetup: (token: string, password: string) =>
+    api.post<{ message: string }>('/account-setup/complete', { token, password }),
 };
