@@ -33,22 +33,26 @@ function PolylineRenderer({
       return;
     }
 
-    console.log('Rendering polyline for route:', route.name);
-
-    // Decode the polyline string
-    let path: any[] = [];
+    let path: google.maps.LatLngLiteral[] = [];
     try {
       if (route.polyline && route.polyline.trim() !== '') {
-        path = geometryLib.encoding.decodePath(route.polyline);
-        console.log(`Successfully decoded ${path.length} points for route:`, route.name);
+        const decoded = geometryLib.encoding.decodePath(route.polyline);
+        const points = decoded.map(p => ({ lat: p.lat(), lng: p.lng() }));
+        const firstLat = points[0]?.lat;
+        const firstLng = points[0]?.lng;
+        const latDrift = Math.abs((firstLat ?? 0) - route.originLat);
+        const lngDrift = Math.abs((firstLng ?? 0) - route.originLng);
+        if (latDrift < 1 && lngDrift < 1) {
+          path = points;
+        } else {
+          console.warn(`Polyline for route "${route.name}" decodes far from origin (${firstLat}, ${firstLng}); using straight line instead.`);
+        }
       }
     } catch (e) {
       console.error('Failed to decode polyline for route', route.id, e);
     }
 
     if (path.length === 0) {
-      console.log('Falling back to straight line for route:', route.name);
-      // Fallback to straight line using plain objects
       path = [
         { lat: route.originLat, lng: route.originLng },
         { lat: route.destLat, lng: route.destLng }
@@ -94,32 +98,21 @@ function PolylineRenderer({
 
 function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRouteDTO[], selectedRouteId?: number | null }) {
   const map = useMap();
-  const geometryLib = useMapsLibrary('geometry');
 
   useEffect(() => {
-    if (!map || !window.google || !geometryLib || routes.length === 0) return;
+    if (!map || !window.google || routes.length === 0) return;
 
     const bounds = new google.maps.LatLngBounds();
     let hasValidPoints = false;
 
     if (selectedRouteId) {
-      // Zoom to specific route
       const route = routes.find(r => r.id === selectedRouteId);
       if (route) {
         bounds.extend({ lat: route.originLat, lng: route.originLng });
         bounds.extend({ lat: route.destLat, lng: route.destLng });
-        try {
-          if (route.polyline && route.polyline.trim() !== '') {
-            const path = geometryLib.encoding.decodePath(route.polyline);
-            path.forEach(p => bounds.extend(p));
-          }
-        } catch (e) {
-          // ignore
-        }
         hasValidPoints = true;
       }
     } else {
-      // Zoom to all routes
       routes.forEach(route => {
         bounds.extend({ lat: route.originLat, lng: route.originLng });
         bounds.extend({ lat: route.destLat, lng: route.destLng });
@@ -128,17 +121,15 @@ function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRoute
     }
 
     if (hasValidPoints) {
-      map.fitBounds(bounds);
-      
-      // Add some padding
+      map.fitBounds(bounds, 80);
+
       const listener = google.maps.event.addListener(map, 'idle', () => {
-        if (map.getZoom() && map.getZoom()! > 14) {
-          map.setZoom(14);
-        }
+        const z = map.getZoom();
+        if (z && z > 14) map.setZoom(14);
         google.maps.event.removeListener(listener);
       });
     }
-  }, [map, geometryLib, routes, selectedRouteId]);
+  }, [map, routes, selectedRouteId]);
 
   return null;
 }
@@ -201,11 +192,11 @@ export default function ShuttleMapView({
                 </AdvancedMarker>
 
                 {/* Destination Marker */}
-                <AdvancedMarker 
+                <AdvancedMarker
                   position={{ lat: route.destLat, lng: route.destLng }}
                   onClick={() => setActiveInfoWindow({id: route.id, type: 'dest', lat: route.destLat, lng: route.destLng, title: route.destinationName, subtitle: 'Destination - ' + route.name})}
                 >
-                  <Pin background={'#ef4444'} borderColor={'#fff'} glyphColor={'#fff'} />
+                  <Pin background={route.color || '#3b82f6'} borderColor={'#fff'} glyphColor={'#fff'} />
                 </AdvancedMarker>
               </React.Fragment>
             );

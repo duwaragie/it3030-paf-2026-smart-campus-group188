@@ -18,11 +18,11 @@ public class ShuttleRouteDataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         if (shuttleRouteRepository.count() == 0) {
-            
-            // Dummy polylines - in a real scenario these would be fetched from Google Directions API
-            String polyKollupitiya = "}n~iA~k{yMa@q@cCgEwA{BsAcCe@mAi@qA[u@W_@YWe@c@w@e@w@e@w@e@w@e@";
-            String polyPanadura = "}x{iA_qzyMa@q@cCgEwA{BsAcCe@mAi@qA[u@W_@YWe@c@w@e@w@e@w@e@w@e@";
-            String polyNegombo = "_|`jA}r~yMa@q@cCgEwA{BsAcCe@mAi@qA[u@W_@YWe@c@w@e@w@e@w@e@w@e@";
+            // Leave polyline empty so the client renders a straight line between origin and destination.
+            // Populate these with overview_polyline.points from Google Directions API for road-following curves.
+            String polyKollupitiya = "";
+            String polyPanadura = "";
+            String polyNegombo = "";
 
             List<ShuttleRoute> routes = Arrays.asList(
                 ShuttleRoute.builder()
