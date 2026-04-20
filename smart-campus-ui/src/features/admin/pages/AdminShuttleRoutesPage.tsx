@@ -482,7 +482,7 @@ export default function AdminShuttleRoutesPage() {
           </div>
 
           {/* Right Column: Live Map Preview */}
-          <div className="w-full lg:w-1/2 xl:w-3/5 min-h-[400px] lg:min-h-[600px] sticky top-24 relative">
+          <div className="w-full lg:w-1/2 xl:w-3/5 min-h-[400px] lg:min-h-[600px] top-24 relative">
             <ShuttleMapView 
               routes={previewRoutes} 
               selectedRouteId={showForm ? (editingId || null) : selectedRoute?.id} 
