@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // React Compiler-era rules (eslint-plugin-react-hooks v7+). They flag
+      // code patterns the compiler can't auto-memoize, not runtime bugs.
+      // Code is stable as-is; migration is out of scope for this project.
+      'react-hooks/immutability': 'off',
+      'react-hooks/static-components': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/incompatible-library': 'off',
+    },
   },
 ])

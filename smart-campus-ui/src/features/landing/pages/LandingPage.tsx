@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import PublicHeader from '@/components/layout/PublicHeader';
 import PublicFooter from '@/components/layout/PublicFooter';
+import { PublicShuttleMap } from '@/features/shuttle/components/PublicShuttleMap';
 
 type RoleKey = 'STUDENT' | 'LECTURER' | 'ADMIN';
 
@@ -213,66 +214,58 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Mock dashboard visual */}
-          <div className="relative">
-            <div className="absolute -inset-4 bg-gradient-to-br from-campus-200/40 to-amber-200/30 rounded-3xl blur-2xl" />
-            <div className="relative bg-white rounded-3xl border border-gray-100 shadow-2xl p-5 space-y-4 rotate-[1deg] hover:rotate-0 transition-transform duration-500">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-red-400" />
-                  <div className="w-2 h-2 rounded-full bg-amber-400" />
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+          <div className="relative flex flex-col gap-6">
+            {/* Mock dashboard visual */}
+            <div className="relative">
+              <div className="absolute -inset-4 bg-gradient-to-br from-campus-200/40 to-amber-200/30 rounded-3xl blur-2xl" />
+              <div className="relative bg-white rounded-3xl border border-gray-100 shadow-2xl p-5 space-y-4 rotate-[1deg] hover:rotate-0 transition-transform duration-500">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  </div>
+                  <span className="text-[10px] font-mono text-gray-400">dashboard.academiccurator</span>
                 </div>
-                <span className="text-[10px] font-mono text-gray-400">dashboard.academiccurator</span>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Active Bookings', value: '24', color: 'bg-campus-50 text-campus-700' },
-                  { label: 'Open Tickets', value: '3', color: 'bg-amber-50 text-amber-700' },
-                ].map((s) => (
-                  <div key={s.label} className={`rounded-xl p-3 ${s.color}`}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80">{s.label}</p>
-                    <p className="text-xl font-extrabold mt-0.5">{s.value}</p>
-                  </div>
-                ))}
-              </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Active Bookings', value: '24', color: 'bg-campus-50 text-campus-700' },
+                    { label: 'Open Tickets', value: '3', color: 'bg-amber-50 text-amber-700' },
+                  ].map((s) => (
+                    <div key={s.label} className={`rounded-xl p-3 ${s.color}`}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80">{s.label}</p>
+                      <p className="text-xl font-extrabold mt-0.5">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="space-y-2">
-                {[
-                  { t: 'Lab 304 booked', s: '2:00 PM', ok: true },
-                  { t: 'Projector incident raised', s: 'Block B', ok: false },
-                  { t: 'Library slot approved', s: '10:00 AM', ok: true },
-                ].map((row) => (
-                  <div key={row.t} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        row.ok ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        {row.ok ? <path d="M5 13l4 4L19 7" /> : <path d="M12 9v4m0 4h.01" />}
-                      </svg>
+                <div className="space-y-2">
+                  {[
+                    { t: 'Lab 304 booked', s: '2:00 PM', ok: true },
+                    { t: 'Projector incident raised', s: 'Block B', ok: false },
+                    { t: 'Library slot approved', s: '10:00 AM', ok: true },
+                  ].map((row) => (
+                    <div key={row.t} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                          row.ok ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                        }`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          {row.ok ? <path d="M5 13l4 4L19 7" /> : <path d="M12 9v4m0 4h.01" />}
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-campus-800 truncate">{row.t}</p>
+                        <p className="text-[10px] text-gray-400">{row.s}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-campus-800 truncate">{row.t}</p>
-                      <p className="text-[10px] text-gray-400">{row.s}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="absolute -right-4 -bottom-4 bg-white rounded-2xl border border-gray-100 shadow-lg p-3 flex items-center gap-3 w-52">
-              <div className="w-9 h-9 rounded-xl bg-campus-600 text-white flex items-center justify-center text-sm font-bold">
-                AC
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-campus-800 truncate">Active admin</p>
-                <p className="text-[10px] text-gray-400 truncate">All systems nominal</p>
-              </div>
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            </div>
           </div>
         </div>
       </section>
@@ -381,6 +374,26 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Live shuttle routes */}
+      <section id="shuttle" className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <Reveal>
+            <div className="text-center space-y-3 max-w-2xl mx-auto mb-10">
+              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-campus-500">
+                Live on campus
+              </span>
+              <h2 className="text-3xl md:text-4xl font-bold text-campus-900">Campus shuttle routes</h2>
+              <p className="text-gray-500">
+                Three routes connecting Kollupitiya, Panadura, and Negombo to the Malabe campus. Live status, always up to date.
+              </p>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <PublicShuttleMap />
+          </Reveal>
         </div>
       </section>
 
