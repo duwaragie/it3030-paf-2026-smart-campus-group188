@@ -123,6 +123,40 @@ public class EmailService {
                 .replace("'", "&#39;");
     }
 
+    public void sendAccountInviteEmail(String toEmail, String recipientName, String role, String setupUrl, int expiryHours) {
+        String subject = "Academic Curator – Set Up Your Account";
+        String safeName = escapeHtml(recipientName != null ? recipientName : "there");
+        String safeRole = escapeHtml(role != null ? role : "STAFF");
+        String safeUrl = escapeHtml(setupUrl);
+        String html = buildLayout(
+            "Welcome to Academic Curator",
+            "<p style=\"margin:0 0 16px;color:" + TEXT + ";font-size:15px;line-height:1.6;\">"
+                + "Hi " + safeName + ","
+                + "</p>"
+                + "<p style=\"margin:0 0 24px;color:" + TEXT_MUTED + ";font-size:14px;line-height:1.6;\">"
+                + "An administrator has created an Academic Curator account for you with the role "
+                + "<strong style=\"color:" + PRIMARY + ";\">" + safeRole + "</strong>. "
+                + "To activate your account, set your password using the secure link below. "
+                + "This link expires in <strong>" + expiryHours + " hours</strong>."
+                + "</p>"
+                + "<div style=\"text-align:center;margin:0 0 24px;\">"
+                + "  <a href=\"" + safeUrl + "\" style=\"display:inline-block;background:" + PRIMARY + ";color:" + WHITE + ";text-decoration:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:600;\">"
+                + "    Set up your account"
+                + "  </a>"
+                + "</div>"
+                + "<p style=\"margin:0 0 12px;color:" + TEXT_MUTED + ";font-size:13px;line-height:1.5;\">"
+                + "Or copy this link into your browser:"
+                + "</p>"
+                + "<div style=\"background:" + BG + ";border-radius:8px;padding:12px 16px;word-break:break-all;margin:0 0 24px;\">"
+                + "  <a href=\"" + safeUrl + "\" style=\"color:" + PRIMARY_LIGHT + ";font-size:13px;text-decoration:none;\">" + safeUrl + "</a>"
+                + "</div>"
+                + "<p style=\"margin:0;color:" + TEXT_MUTED + ";font-size:13px;line-height:1.5;\">"
+                + "If you were not expecting this invitation, you can safely ignore this email."
+                + "</p>"
+        );
+        send(toEmail, subject, html);
+    }
+
     public void sendPasswordResetEmail(String toEmail, String resetUrl, int expiryMinutes) {
         String subject = "Academic Curator – Reset Your Password";
         String html = buildLayout(

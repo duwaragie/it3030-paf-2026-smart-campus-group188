@@ -8,6 +8,7 @@ import VerifyOtpPage from './features/auth/pages/VerifyOtpPage';
 import OAuthRedirectHandler from './features/auth/pages/OAuthRedirectHandler';
 import ForgotPasswordPage from './features/auth/pages/ForgotPasswordPage';
 import ResetPasswordPage from './features/auth/pages/ResetPasswordPage';
+import AccountSetupPage from './features/auth/pages/AccountSetupPage';
 import DashboardPage from './features/dashboard/pages/DashboardPage';
 import ProfilePage from './features/profile/pages/ProfilePage';
 import CompleteProfilePage from './features/profile/pages/CompleteProfilePage';
@@ -18,6 +19,7 @@ import AssetsAdminPage from './features/admin/pages/AssetsAdminPage';
 import AmenitiesAdminPage from './features/admin/pages/AmenitiesAdminPage';
 import IncidentsPage from './features/admin/pages/IncidentsPage';
 import NotificationsPage from './features/admin/pages/NotificationsPage';
+import AuditPage from './features/admin/pages/AuditPage';
 import LandingPage from './features/landing/pages/LandingPage';
 import AboutPage from './features/landing/pages/AboutPage';
 import ContactPage from './features/landing/pages/ContactPage';
@@ -95,6 +97,7 @@ function App() {
       <Route path="/verify" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
       <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+      <Route path="/account-setup" element={<PublicRoute><AccountSetupPage /></PublicRoute>} />
       <Route path="/oauth2/redirect" element={<OAuthRedirectHandler />} />
 
       {/* Profile completion gate (authenticated but profile incomplete) */}
@@ -133,6 +136,7 @@ function App() {
       <Route path="/technician/dashboard" element={<RoleRoute roles={['TECHNICAL_STAFF']}><TechnicianDashboardPage /></RoleRoute>} />
       <Route path="/admin/incidents" element={<RoleRoute roles={['ADMIN']}><IncidentsPage /></RoleRoute>} />
       <Route path="/admin/notifications" element={<RoleRoute roles={['ADMIN']}><NotificationsPage /></RoleRoute>} />
+      <Route path="/admin/audit" element={<RoleRoute roles={['ADMIN']}><AuditPage /></RoleRoute>} />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

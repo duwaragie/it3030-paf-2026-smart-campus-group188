@@ -8,7 +8,6 @@ import { adminService } from '@/services/adminService';
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
   role: z.enum(['LECTURER', 'ADMIN', 'TECHNICAL_STAFF'], { message: 'Please select a role' }),
   employeeId: z.string().min(1, 'Employee ID is required').max(32, 'Employee ID is too long'),
 });
@@ -36,7 +35,7 @@ export default function RegisterUserPage() {
       const res = await adminService.createUser({ ...data, employeeId: data.employeeId.trim() });
       setMsg({
         type: 'success',
-        text: `Account for ${res.data.name} (${res.data.role}) created successfully.`,
+        text: `Invitation sent to ${res.data.email}. ${res.data.name} (${res.data.role}) will set their password via the emailed link.`,
       });
       reset({ role: 'LECTURER' });
     } catch (err) {
@@ -50,7 +49,6 @@ export default function RegisterUserPage() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        {/* Full-width heading */}
         <div className="space-y-3">
           <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-campus-500 bg-campus-50 px-2.5 py-1 rounded-md">
             Admin only
@@ -59,12 +57,11 @@ export default function RegisterUserPage() {
             Register New Staff Account
           </h1>
           <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">
-            Create accounts for lecturers or administrators. Accounts are pre-verified and ready
-            to use immediately, so no email verification step is required.
+            Create accounts for lecturers, administrators, or technical staff. The user receives an
+            invitation email and sets their own password before first login.
           </p>
         </div>
 
-        {/* 2-column: help cards on left, form on right, aligned */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 lg:gap-8 items-start">
           <div className="space-y-6 lg:sticky lg:top-24">
             <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
@@ -73,9 +70,9 @@ export default function RegisterUserPage() {
               </h3>
               <ol className="space-y-3">
                 {[
-                  'The account is created with email verified and ready to sign in.',
+                  'The user receives an invitation email with a secure setup link.',
+                  'They click the link, choose a password, and verify their email in one step.',
                   'The employee ID you assign is permanent and must be unique.',
-                  'Share the temporary password securely, and have the user change it on first login.',
                 ].map((text, i) => (
                   <li key={i} className="flex gap-3 text-sm text-gray-600 leading-relaxed">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-campus-50 text-campus-600 text-[11px] font-bold flex items-center justify-center mt-0.5">
@@ -169,31 +166,17 @@ export default function RegisterUserPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Password</label>
-                  <input
-                    {...register('password')}
-                    type="password"
-                    placeholder="Minimum 8 characters"
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-campus-200 focus:border-campus-400"
-                  />
-                  {errors.password && (
-                    <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Role</label>
-                  <select
-                    {...register('role')}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 focus:border-campus-400"
-                  >
-                    <option value="LECTURER">Lecturer</option>
-                    <option value="TECHNICAL_STAFF">Technical Staff</option>
-                    <option value="ADMIN">Administrator</option>
-                  </select>
-                  {errors.role && <p className="text-xs text-red-500 mt-1">{errors.role.message}</p>}
-                </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Role</label>
+                <select
+                  {...register('role')}
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 focus:border-campus-400"
+                >
+                  <option value="LECTURER">Lecturer</option>
+                  <option value="TECHNICAL_STAFF">Technical Staff</option>
+                  <option value="ADMIN">Administrator</option>
+                </select>
+                {errors.role && <p className="text-xs text-red-500 mt-1">{errors.role.message}</p>}
               </div>
 
               <button
@@ -201,7 +184,7 @@ export default function RegisterUserPage() {
                 disabled={isLoading}
                 className="w-full h-12 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 disabled:opacity-60 transition-colors"
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {isLoading ? 'Sending Invitation...' : 'Send Invitation'}
               </button>
             </form>
           </div>

@@ -38,6 +38,7 @@ public class SecurityConfig {
     
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
+    private final com.smartcampus.api.security.OAuth2FailureHandler oAuth2FailureHandler;
     private final JwtAuthFilter jwtAuthFilter;
     private final CustomUserDetailsService customUserDetailsService;
 
@@ -78,6 +79,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/verify-email").permitAll()
                         .requestMatchers("/api/auth/resend-otp", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/auth/refresh-token").permitAll()
+                        .requestMatchers("/api/account-setup/**").permitAll()
                         .requestMatchers("/api/contact").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/shuttle/routes").permitAll()
                         .requestMatchers("/oauth2/**", "/login/**").permitAll()
@@ -92,6 +94,7 @@ public class SecurityConfig {
                                 .userService(customOAuth2UserService)
                         )
                         .successHandler(oAuth2SuccessHandler)
+                        .failureHandler(oAuth2FailureHandler)
                 )
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {

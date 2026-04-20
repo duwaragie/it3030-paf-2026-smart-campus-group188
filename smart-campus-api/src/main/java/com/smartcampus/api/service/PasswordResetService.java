@@ -1,5 +1,6 @@
 package com.smartcampus.api.service;
 
+import com.smartcampus.api.model.AuditAction;
 import com.smartcampus.api.model.PasswordResetToken;
 import com.smartcampus.api.model.User;
 import com.smartcampus.api.repository.PasswordResetTokenRepository;
@@ -27,13 +28,14 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final AuditService auditService;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
     @Transactional
     public void initiatePasswordReset(String email) {
-        Optional<User> userOpt = userRepository.findByEmail(email);
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email);
 
         // Silent on unknown email — prevents account enumeration.
         if (userOpt.isEmpty()) {
@@ -65,11 +67,12 @@ public class PasswordResetService {
 
         String resetUrl = frontendUrl + "/reset-password?token=" + rawToken + "&email=" + email;
         emailService.sendPasswordResetEmail(email, resetUrl, EXPIRY_MINUTES);
+        auditService.log(user, AuditAction.PASSWORD_RESET_REQUESTED, "USER", String.valueOf(user.getId()), null);
     }
 
     @Transactional
     public void resetPassword(String email, String rawToken, String newPassword) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new RuntimeException("Invalid reset request."));
 
         PasswordResetToken token = resetTokenRepository.findByUser(user)
@@ -94,5 +97,6 @@ public class PasswordResetService {
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         resetTokenRepository.delete(token);
+        auditService.log(user, AuditAction.PASSWORD_RESET_COMPLETED, "USER", String.valueOf(user.getId()), null);
     }
 }
