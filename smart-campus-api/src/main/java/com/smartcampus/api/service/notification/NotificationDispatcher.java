@@ -42,6 +42,14 @@ public class NotificationDispatcher {
 
     public void dispatch(NotificationRequest request) {
         Long userId = request.getRecipient().getId();
+        // Force-initialize the User proxy's string fields inside the caller's
+        // transaction. The @Async EmailNotificationChannel runs on a separate
+        // thread where the Hibernate session is gone, so accessing a lazy
+        // proxy there throws "Illegal pop()" / LazyInitializationException.
+        // Touching getEmail()/getName() here populates the proxy's cached
+        // target, which the async thread can then read without a session.
+        request.getRecipient().getEmail();
+        request.getRecipient().getName();
         send(NotificationChannelType.IN_APP, request);
 
         UserNotificationPreference pref = preferenceRepository.findByUserId(userId).orElse(null);

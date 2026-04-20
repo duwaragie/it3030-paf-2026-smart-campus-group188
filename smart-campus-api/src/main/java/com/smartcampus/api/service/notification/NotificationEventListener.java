@@ -94,16 +94,51 @@ public class NotificationEventListener {
                 && !event.actorId().equals(b.getUser().getId());
         if (!cancelledByAdmin) return;
 
+        String reasonSuffix = event.reason() != null && !event.reason().isBlank()
+                ? " Reason: " + event.reason()
+                : "";
         dispatcher.dispatch(NotificationRequest.builder()
                 .recipient(b.getUser())
                 .type(NotificationType.BOOKING_CANCELLED)
                 .priority(NotificationPriority.MEDIUM)
                 .title("Booking cancelled")
                 .message(String.format(
-                        "An administrator cancelled your booking for %s (%s – %s).",
+                        "An administrator cancelled your booking for %s (%s – %s).%s",
+                        b.getResource().getName(), b.getStartTime(), b.getEndTime(), reasonSuffix))
+                .link("/bookings")
+                .build());
+    }
+
+    @EventListener
+    public void onBookingCompleted(BookingEvents.BookingCompleted event) {
+        Booking b = event.booking();
+        dispatcher.dispatch(NotificationRequest.builder()
+                .recipient(b.getUser())
+                .type(NotificationType.BOOKING_COMPLETED)
+                .priority(NotificationPriority.LOW)
+                .title("Booking completed")
+                .message(String.format(
+                        "Your booking for %s (%s – %s) has ended.",
                         b.getResource().getName(), b.getStartTime(), b.getEndTime()))
                 .link("/bookings")
                 .build());
+    }
+
+    @EventListener
+    public void onBookingResubmitted(BookingEvents.BookingResubmitted event) {
+        Booking b = event.booking();
+        userRepository.findByRole(Role.ADMIN)
+                .forEach(admin -> dispatcher.dispatch(NotificationRequest.builder()
+                        .recipient(admin)
+                        .type(NotificationType.BOOKING_CREATED)
+                        .priority(NotificationPriority.LOW)
+                        .title("Booking resubmitted after rejection")
+                        .message(String.format(
+                                "%s edited and resubmitted a rejected booking for %s (%s – %s).",
+                                b.getUser().getName(), b.getResource().getName(),
+                                b.getStartTime(), b.getEndTime()))
+                        .link("/admin/bookings")
+                        .build()));
     }
 
     @EventListener
