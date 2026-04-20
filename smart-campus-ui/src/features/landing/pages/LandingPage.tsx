@@ -266,10 +266,6 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Shuttle Map Widget */}
-            <div className="relative animate-fade-in z-10 hover:-translate-y-1 transition-transform duration-500">
-              <PublicShuttleMap />
-            </div>
           </div>
         </div>
       </section>
@@ -378,6 +374,26 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Live shuttle routes */}
+      <section id="shuttle" className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <Reveal>
+            <div className="text-center space-y-3 max-w-2xl mx-auto mb-10">
+              <span className="inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-campus-500">
+                Live on campus
+              </span>
+              <h2 className="text-3xl md:text-4xl font-bold text-campus-900">Campus shuttle routes</h2>
+              <p className="text-gray-500">
+                Three routes connecting Kollupitiya, Panadura, and Negombo to the Malabe campus. Live status, always up to date.
+              </p>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <PublicShuttleMap />
+          </Reveal>
         </div>
       </section>
 

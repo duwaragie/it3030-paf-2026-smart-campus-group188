@@ -14,42 +14,100 @@ interface ShuttleMapViewProps {
 // Center of Sri Lanka roughly
 const DEFAULT_CENTER = { lat: 7.8731, lng: 80.7718 };
 
-function PolylineRenderer({ 
-  route, 
-  isSelected, 
-  onClick 
-}: { 
-  route: ShuttleRouteDTO; 
+// Module-level cache so we don't re-hit Directions API for the same route on remount.
+// Plain object instead of a Map instance because `Map` is shadowed by the imported map component.
+const directionsCache: Record<string, google.maps.LatLngLiteral[]> = {};
+
+function cacheKey(route: ShuttleRouteDTO) {
+  return `${route.id}:${route.originLat},${route.originLng}->${route.destLat},${route.destLng}`;
+}
+
+function PolylineRenderer({
+  route,
+  isSelected,
+  onClick
+}: {
+  route: ShuttleRouteDTO;
   isSelected: boolean;
   onClick?: () => void;
 }) {
   const map = useMap();
   const geometryLib = useMapsLibrary('geometry');
+  const routesLib = useMapsLibrary('routes');
   const polylineRef = useRef<google.maps.Polyline | null>(null);
+  const [directionsPath, setDirectionsPath] = useState<google.maps.LatLngLiteral[] | null>(null);
 
+  // Fetch road-following path from Directions API if we don't have a usable stored polyline.
   useEffect(() => {
-    if (!map || !window.google || !geometryLib) {
-      console.log('Waiting for map or geometry library...', { hasMap: !!map, hasGoogle: !!window.google, hasGeometry: !!geometryLib });
+    if (!routesLib || !geometryLib) return;
+
+    const key = cacheKey(route);
+    if (directionsCache[key]) {
+      setDirectionsPath(directionsCache[key]);
       return;
     }
 
+    // Skip fetch if DB polyline already looks valid (decoded first point near origin).
+    if (route.polyline && route.polyline.trim() !== '') {
+      try {
+        const decoded = geometryLib.encoding.decodePath(route.polyline);
+        const firstLat = decoded[0]?.lat();
+        const firstLng = decoded[0]?.lng();
+        if (
+          firstLat !== undefined &&
+          firstLng !== undefined &&
+          Math.abs(firstLat - route.originLat) < 1 &&
+          Math.abs(firstLng - route.originLng) < 1
+        ) {
+          return;
+        }
+      } catch {
+        // fall through and fetch
+      }
+    }
+
+    const service = new routesLib.DirectionsService();
+    service.route(
+      {
+        origin: { lat: route.originLat, lng: route.originLng },
+        destination: { lat: route.destLat, lng: route.destLng },
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result?.routes[0]?.overview_path) {
+          const path = result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() }));
+          directionsCache[key] = path;
+          setDirectionsPath(path);
+        } else {
+          console.warn(`Directions API failed for route "${route.name}" (${status}); falling back to straight line.`);
+        }
+      }
+    );
+  }, [routesLib, geometryLib, route]);
+
+  useEffect(() => {
+    if (!map || !window.google || !geometryLib) return;
+
     let path: google.maps.LatLngLiteral[] = [];
-    try {
-      if (route.polyline && route.polyline.trim() !== '') {
+
+    if (directionsPath && directionsPath.length > 0) {
+      path = directionsPath;
+    } else if (route.polyline && route.polyline.trim() !== '') {
+      try {
         const decoded = geometryLib.encoding.decodePath(route.polyline);
         const points = decoded.map(p => ({ lat: p.lat(), lng: p.lng() }));
         const firstLat = points[0]?.lat;
         const firstLng = points[0]?.lng;
-        const latDrift = Math.abs((firstLat ?? 0) - route.originLat);
-        const lngDrift = Math.abs((firstLng ?? 0) - route.originLng);
-        if (latDrift < 1 && lngDrift < 1) {
+        if (
+          firstLat !== undefined &&
+          Math.abs(firstLat - route.originLat) < 1 &&
+          Math.abs((firstLng ?? 0) - route.originLng) < 1
+        ) {
           path = points;
-        } else {
-          console.warn(`Polyline for route "${route.name}" decodes far from origin (${firstLat}, ${firstLng}); using straight line instead.`);
         }
+      } catch (e) {
+        console.error('Failed to decode polyline for route', route.id, e);
       }
-    } catch (e) {
-      console.error('Failed to decode polyline for route', route.id, e);
     }
 
     if (path.length === 0) {
@@ -63,7 +121,7 @@ function PolylineRenderer({
       path,
       geodesic: true,
       strokeColor: route.color || '#3b82f6',
-      strokeOpacity: isSelected ? 1.0 : 0.6,
+      strokeOpacity: isSelected ? 1.0 : 0.7,
       strokeWeight: isSelected ? 6 : 4,
       zIndex: isSelected ? 10 : 1,
       map: map,
@@ -71,15 +129,13 @@ function PolylineRenderer({
     });
 
     if (onClick) {
-      polyline.addListener('click', () => {
-        onClick();
-      });
+      polyline.addListener('click', () => onClick());
       polyline.addListener('mouseover', () => {
         polyline.setOptions({ strokeOpacity: 1.0, strokeWeight: 6 });
       });
       polyline.addListener('mouseout', () => {
         if (!isSelected) {
-          polyline.setOptions({ strokeOpacity: 0.6, strokeWeight: 4 });
+          polyline.setOptions({ strokeOpacity: 0.7, strokeWeight: 4 });
         }
       });
     }
@@ -91,7 +147,7 @@ function PolylineRenderer({
         polylineRef.current.setMap(null);
       }
     };
-  }, [map, geometryLib, route, isSelected, onClick]);
+  }, [map, geometryLib, route, isSelected, onClick, directionsPath]);
 
   return null;
 }
@@ -166,7 +222,7 @@ export default function ShuttleMapView({
           defaultZoom={zoom}
           gestureHandling={interactive ? 'greedy' : 'none'}
           disableDefaultUI={!interactive}
-          mapId="SHUTTLE_MAP_ID"
+          {...(hideMarkers ? {} : { mapId: 'SHUTTLE_MAP_ID' })}
         >
           {routes.map(route => (
             <PolylineRenderer 
