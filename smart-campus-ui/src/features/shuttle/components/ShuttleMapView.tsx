@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { APIProvider, Map, useMap, AdvancedMarker, Pin, InfoWindow } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, useMap, AdvancedMarker, Pin, InfoWindow, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { type ShuttleRouteDTO } from '@/services/shuttleService';
 
 interface ShuttleMapViewProps {
@@ -24,26 +24,34 @@ function PolylineRenderer({
   onClick?: () => void;
 }) {
   const map = useMap();
+  const geometryLib = useMapsLibrary('geometry');
   const polylineRef = useRef<google.maps.Polyline | null>(null);
 
   useEffect(() => {
-    if (!map || !window.google) return;
+    if (!map || !window.google || !geometryLib) {
+      console.log('Waiting for map or geometry library...', { hasMap: !!map, hasGoogle: !!window.google, hasGeometry: !!geometryLib });
+      return;
+    }
 
-    // Decode the polyline string into an array of LatLng objects
-    let path: google.maps.LatLng[] = [];
+    console.log('Rendering polyline for route:', route.name);
+
+    // Decode the polyline string
+    let path: any[] = [];
     try {
-      if (route.polyline) {
-        path = google.maps.geometry.encoding.decodePath(route.polyline);
+      if (route.polyline && route.polyline.trim() !== '') {
+        path = geometryLib.encoding.decodePath(route.polyline);
+        console.log(`Successfully decoded ${path.length} points for route:`, route.name);
       }
     } catch (e) {
       console.error('Failed to decode polyline for route', route.id, e);
     }
 
     if (path.length === 0) {
-      // Fallback to straight line if decoding fails or no polyline provided
+      console.log('Falling back to straight line for route:', route.name);
+      // Fallback to straight line using plain objects
       path = [
-        new google.maps.LatLng(route.originLat, route.originLng),
-        new google.maps.LatLng(route.destLat, route.destLng)
+        { lat: route.originLat, lng: route.originLng },
+        { lat: route.destLat, lng: route.destLng }
       ];
     }
 
@@ -79,16 +87,17 @@ function PolylineRenderer({
         polylineRef.current.setMap(null);
       }
     };
-  }, [map, route, isSelected, onClick]);
+  }, [map, geometryLib, route, isSelected, onClick]);
 
   return null;
 }
 
 function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRouteDTO[], selectedRouteId?: number | null }) {
   const map = useMap();
+  const geometryLib = useMapsLibrary('geometry');
 
   useEffect(() => {
-    if (!map || !window.google || routes.length === 0) return;
+    if (!map || !window.google || !geometryLib || routes.length === 0) return;
 
     const bounds = new google.maps.LatLngBounds();
     let hasValidPoints = false;
@@ -97,11 +106,11 @@ function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRoute
       // Zoom to specific route
       const route = routes.find(r => r.id === selectedRouteId);
       if (route) {
-        bounds.extend(new google.maps.LatLng(route.originLat, route.originLng));
-        bounds.extend(new google.maps.LatLng(route.destLat, route.destLng));
+        bounds.extend({ lat: route.originLat, lng: route.originLng });
+        bounds.extend({ lat: route.destLat, lng: route.destLng });
         try {
-          if (route.polyline) {
-            const path = google.maps.geometry.encoding.decodePath(route.polyline);
+          if (route.polyline && route.polyline.trim() !== '') {
+            const path = geometryLib.encoding.decodePath(route.polyline);
             path.forEach(p => bounds.extend(p));
           }
         } catch (e) {
@@ -112,8 +121,8 @@ function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRoute
     } else {
       // Zoom to all routes
       routes.forEach(route => {
-        bounds.extend(new google.maps.LatLng(route.originLat, route.originLng));
-        bounds.extend(new google.maps.LatLng(route.destLat, route.destLng));
+        bounds.extend({ lat: route.originLat, lng: route.originLng });
+        bounds.extend({ lat: route.destLat, lng: route.destLng });
         hasValidPoints = true;
       });
     }
@@ -129,7 +138,7 @@ function MapBoundsController({ routes, selectedRouteId }: { routes: ShuttleRoute
         google.maps.event.removeListener(listener);
       });
     }
-  }, [map, routes, selectedRouteId]);
+  }, [map, geometryLib, routes, selectedRouteId]);
 
   return null;
 }
