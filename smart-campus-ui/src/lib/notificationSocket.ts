@@ -2,14 +2,8 @@ import { Client, type IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import type { NotificationDTO } from '@/services/notificationService';
 
-/**
- * Single STOMP connection shared across the whole app. Subscribers register
- * a callback; the module owns reconnect + token refresh.
- *
- * Auth: the JWT goes in the STOMP CONNECT frame's "Authorization" header.
- * Server's StompAuthChannelInterceptor reads it and attaches the principal.
- */
-
+// Single shared STOMP connection. JWT goes in the CONNECT frame's
+// Authorization header; the server-side interceptor attaches the principal.
 type Listener = (n: NotificationDTO) => void;
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -31,11 +25,9 @@ function buildClient(token: string): Client {
         try {
           const parsed = JSON.parse(msg.body) as NotificationDTO;
           listeners.forEach((l) => {
-            try { l(parsed); } catch { /* swallow per-listener errors */ }
+            try { l(parsed); } catch { /* ignore */ }
           });
-        } catch {
-          /* ignore malformed frames */
-        }
+        } catch { /* ignore malformed frames */ }
       });
     },
   });
@@ -45,7 +37,6 @@ export const notificationSocket = {
   connect(token: string) {
     if (!token) return;
     if (client && currentToken === token && client.active) return;
-    // Token changed or not connected — rebuild
     if (client) {
       try { client.deactivate(); } catch { /* ignore */ }
     }

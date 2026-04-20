@@ -37,3 +37,6 @@ build/
 
 ### Local secrets ###
 .vapid-keys.properties
+
+### User-uploaded files (never commit) ###
+uploads/

@@ -8,18 +8,11 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Hibernate auto-generates a CHECK constraint on {@code notifications.type} listing the
- * enum values that existed when the table was first created. Adding new values to
- * {@link com.smartcampus.api.model.NotificationType} leaves that constraint stale and
- * inserts fail.
- *
- * ddl-auto=update does not re-sync CHECK constraints on enum columns, so we drop it
- * once on startup. Idempotent — safe to run every boot.
- */
+// Drops stale Postgres CHECK constraints on enum columns so new enum values
+// don't trip them — ddl-auto=update won't re-sync these once created.
 @Slf4j
 @Component
-@Order(0) // run before DataInitializer
+@Order(0)
 @RequiredArgsConstructor
 public class NotificationSchemaFix implements ApplicationRunner {
 
@@ -28,10 +21,6 @@ public class NotificationSchemaFix implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         dropConstraintIfExists("notifications", "notifications_type_check");
-
-        // The preference model changed from per-type rows to a single row per user
-        // (email + push toggles; in-app is always on). The old table schema is
-        // incompatible — drop it so Hibernate rebuilds with the new shape.
         dropOldPreferenceTableIfShapeChanged();
     }
 

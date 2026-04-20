@@ -7,6 +7,7 @@ public enum NotificationType {
     WAITLIST_PROMOTED,
     ENROLLMENT_WITHDRAWN,
     GRADE_RELEASED,
+    GRADE_UPDATED,
     COURSE_STATUS_CHANGED,
 
     // Bookings

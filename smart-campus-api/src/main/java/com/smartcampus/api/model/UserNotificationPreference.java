@@ -6,11 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Per-user channel toggles. In-app is always on (not stored) — users can't
- * disable it, so notifications always reach them somewhere. Email and push
- * are opt-in/out.
- */
+import java.time.LocalTime;
+
+// Only email + push are toggleable; in-app is always on and not stored.
 @Entity
 @Table(name = "user_notification_preferences",
         uniqueConstraints = @UniqueConstraint(columnNames = "user_id"))
@@ -35,4 +33,15 @@ public class UserNotificationPreference {
     @Column(nullable = false)
     @Builder.Default
     private Boolean push = false;
+
+    // Nullable so Hibernate `ddl-auto: update` can add these columns to a table
+    // with existing rows. Service layer coalesces nulls to the defaults below.
+    @Builder.Default
+    private Boolean quietHoursEnabled = false;
+
+    @Builder.Default
+    private LocalTime quietHoursStart = LocalTime.of(22, 0);
+
+    @Builder.Default
+    private LocalTime quietHoursEnd = LocalTime.of(7, 0);
 }

@@ -30,13 +30,11 @@ export default function NotificationBell() {
 
   useEffect(() => {
     void refreshCount();
-    // WebSocket is the primary source of truth — poll every 2 minutes as a safety net
-    // for missed frames (reconnects, transient network blips).
+    // Safety-net poll — WebSocket is the primary path.
     const interval = setInterval(() => void refreshCount(), 120_000);
     return () => clearInterval(interval);
   }, []);
 
-  // Live updates over WebSocket — prepend to the open dropdown and bump the badge.
   useEffect(() => {
     const unsubscribe = notificationSocket.subscribe((incoming) => {
       setUnread((prev) => prev + 1);

@@ -22,7 +22,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // Destinations: /topic for broadcast, /user/** for user-specific (resolved by UserDestinationMessageHandler)
         registry.enableSimpleBroker("/topic", "/queue");
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
@@ -30,8 +29,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Client connects via SockJS, which first hits /ws/info for transport negotiation.
-        // withSockJS() registers that handler and the fallback transports.
+        // SockJS needs /ws/info for transport negotiation; withSockJS registers it.
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(frontendUrl)
                 .withSockJS();

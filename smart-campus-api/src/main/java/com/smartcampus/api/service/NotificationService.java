@@ -27,11 +27,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationDispatcher dispatcher;
 
-    /**
-     * Facade over {@link NotificationDispatcher}. Existing call sites keep working;
-     * the actual routing (in-app / email / push) happens inside the dispatcher
-     * based on the recipient's preferences.
-     */
+    // Facade; routing to in-app/email/push happens inside the dispatcher.
     public void notify(User recipient,
                        NotificationType type,
                        NotificationPriority priority,

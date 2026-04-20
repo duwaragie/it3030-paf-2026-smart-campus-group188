@@ -63,14 +63,12 @@ export default function CourseOfferingsAdminPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [busyOfferingId, setBusyOfferingId] = useState<number | null>(null);
 
-  // Offering create/edit modal
   const [showOfferingForm, setShowOfferingForm] = useState(false);
   const [editingOfferingId, setEditingOfferingId] = useState<number | null>(null);
   const [offeringForm, setOfferingForm] = useState<OfferingForm>(emptyOfferingForm);
   const [savingOffering, setSavingOffering] = useState(false);
   const [deleteOfferingConfirm, setDeleteOfferingConfirm] = useState<CourseOfferingDTO | null>(null);
 
-  // Section create/edit modal
   const [sectionForOfferingId, setSectionForOfferingId] = useState<number | null>(null);
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
   const [sectionForm, setSectionForm] = useState<SectionForm>(emptySectionForm);
@@ -105,7 +103,6 @@ export default function CourseOfferingsAdminPage() {
     setSuccess(null);
   };
 
-  // --- Offering handlers ---
   const openCreateOffering = () => {
     setOfferingForm(emptyOfferingForm);
     setEditingOfferingId(null);
@@ -196,7 +193,6 @@ export default function CourseOfferingsAdminPage() {
     }
   };
 
-  // --- Section handlers ---
   const openCreateSection = (offeringId: number) => {
     setSectionForm(emptySectionForm);
     setEditingSectionId(null);

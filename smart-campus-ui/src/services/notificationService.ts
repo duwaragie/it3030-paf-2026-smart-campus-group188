@@ -6,6 +6,7 @@ export type NotificationType =
   | 'WAITLIST_PROMOTED'
   | 'ENROLLMENT_WITHDRAWN'
   | 'GRADE_RELEASED'
+  | 'GRADE_UPDATED'
   | 'COURSE_STATUS_CHANGED'
   | 'BOOKING_CREATED'
   | 'BOOKING_APPROVED'
@@ -33,13 +34,14 @@ export interface NotificationDTO {
   createdAt: string;
 }
 
-/**
- * Global channel toggles. In-app is not user-toggleable (always on) — the
- * backend guarantees at least one delivery method, so it's not in the DTO.
- */
+// In-app is always on and not part of the DTO.
+// Quiet hours suppress push only; times are "HH:mm" strings.
 export interface NotificationPreferenceDTO {
   email: boolean;
   push: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
 }
 
 export const notificationService = {

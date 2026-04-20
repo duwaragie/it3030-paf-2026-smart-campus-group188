@@ -9,7 +9,7 @@ const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  role: z.enum(['LECTURER', 'ADMIN'], { message: 'Please select a role' }),
+  role: z.enum(['LECTURER', 'ADMIN', 'TECHNICAL_STAFF'], { message: 'Please select a role' }),
   employeeId: z.string().min(1, 'Employee ID is required').max(32, 'Employee ID is too long'),
 });
 
@@ -95,6 +95,10 @@ export default function RegisterUserPage() {
                 <div className="flex justify-between gap-2">
                   <dt className="font-semibold text-campus-800">Lecturer</dt>
                   <dd className="text-gray-500 text-right">Manage bookings &amp; incidents</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="font-semibold text-campus-800">Technical Staff</dt>
+                  <dd className="text-gray-500 text-right">View &amp; update all tickets</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="font-semibold text-campus-800">Administrator</dt>
@@ -185,6 +189,7 @@ export default function RegisterUserPage() {
                     className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-200 focus:border-campus-400"
                   >
                     <option value="LECTURER">Lecturer</option>
+                    <option value="TECHNICAL_STAFF">Technical Staff</option>
                     <option value="ADMIN">Administrator</option>
                   </select>
                   {errors.role && <p className="text-xs text-red-500 mt-1">{errors.role.message}</p>}

@@ -24,18 +24,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         OAuth2User oAuth2User = super.loadUser(userRequest);
         
         Map<String, Object> attributes = oAuth2User.getAttributes();
-        
-        // Extract user information from Google
+
         String email = (String) attributes.get("email");
         String name = (String) attributes.get("name");
         String picture = (String) attributes.get("picture");
         String googleId = (String) attributes.get("sub");
-        
-        // Find or create user
+
         User user = userRepository.findByEmail(email)
                 .map(existingUser -> {
-                    // Preserve name/picture once they exist locally so profile edits aren't clobbered
-                    // on subsequent Google sign-ins. Only backfill from Google if the field is blank.
+                    // Only backfill name/picture when blank — otherwise local profile edits would be overwritten on each Google sign-in.
                     if (existingUser.getName() == null || existingUser.getName().isBlank()) {
                         existingUser.setName(name);
                     }
@@ -54,7 +51,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                     return userRepository.save(existingUser);
                 })
                 .orElseGet(() -> {
-                    // Create new user
                     User newUser = new User();
                     newUser.setEmail(email);
                     newUser.setName(name);

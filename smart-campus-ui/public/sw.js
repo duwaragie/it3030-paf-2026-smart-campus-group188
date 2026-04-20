@@ -1,11 +1,6 @@
-/* Smart Campus Hub — Web Push service worker.
- *
- * Receives push events from the backend (signed with the VAPID private key),
- * renders an OS-level notification, and opens the associated deep link when
- * the user clicks it. Runs independently of any open tab.
- */
+// Web Push service worker — renders OS notifications and opens deep links.
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -40,7 +35,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Reuse an open window if one is already focused on the app.
       for (const client of clientList) {
         if ('focus' in client) {
           client.navigate(link);

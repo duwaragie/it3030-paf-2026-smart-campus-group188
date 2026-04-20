@@ -21,6 +21,6 @@ public class CreateCourseSectionRequest {
     @Min(value = 1, message = "Capacity must be at least 1")
     private Integer capacity;
 
-    /** Lecturer can be assigned later; nullable for DRAFT creation. */
+    // Nullable — lecturer can be assigned later on DRAFT offerings.
     private Long lecturerId;
 }

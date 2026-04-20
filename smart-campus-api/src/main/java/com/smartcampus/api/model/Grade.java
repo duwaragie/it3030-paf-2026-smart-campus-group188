@@ -1,9 +1,6 @@
 package com.smartcampus.api.model;
 
-/**
- * Letter grades with their GPA point equivalents on a 4.0 scale.
- * I and W grades are not counted toward GPA (gpaPoints = null).
- */
+// 4.0 scale; I (Incomplete) and W (Withdrawn) don't count toward GPA.
 public enum Grade {
     A_PLUS("A+", 4.0, true),
     A("A", 4.0, true),
@@ -33,4 +30,15 @@ public enum Grade {
     public String getLabel() { return label; }
     public Double getGpaPoints() { return gpaPoints; }
     public boolean isCountsForGpa() { return countsForGpa; }
+
+    // Tolerates case + any whitespace; "b -" and " A + " both resolve.
+    public static Grade fromLabel(String label) {
+        if (label == null) return null;
+        String normalized = label.replaceAll("\\s+", "").toUpperCase();
+        if (normalized.isEmpty()) return null;
+        for (Grade g : values()) {
+            if (g.label.equalsIgnoreCase(normalized)) return g;
+        }
+        return null;
+    }
 }

@@ -1,78 +1,744 @@
+import { useState, useEffect, useRef, useMemo } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
+import { ticketService, type TicketDTO, type TicketStatus, type TicketPriority, type TicketCategory, type TicketCommentDTO, type CreateTicketRequest } from '@/services/ticketService';
+import { adminService, type UserDTO } from '@/services/adminService';
+import { useAuthStore } from '@/store/authStore';
 
-const tickets = [
-  { id: 'TKT-001', title: 'Broken projector in Lab 101', reporter: 'Jane Smith', category: 'Equipment', priority: 'HIGH', status: 'OPEN', assignedTo: 'Unassigned' },
-  { id: 'TKT-002', title: 'AC not working in B-201', reporter: 'Dr. Perera', category: 'Facility', priority: 'MEDIUM', status: 'IN_PROGRESS', assignedTo: 'John Technician' },
-  { id: 'TKT-003', title: 'Network issues in Library', reporter: 'Student User', category: 'IT', priority: 'LOW', status: 'RESOLVED', assignedTo: 'IT Support' },
-];
-
-const priorityStyle: Record<string, string> = {
-  HIGH: 'bg-red-100 text-red-700',
-  MEDIUM: 'bg-amber-100 text-amber-700',
+const PRIORITY_STYLE: Record<TicketPriority, string> = {
   LOW: 'bg-blue-100 text-blue-700',
+  MEDIUM: 'bg-amber-100 text-amber-700',
+  HIGH: 'bg-red-100 text-red-700',
+  CRITICAL: 'bg-red-200 text-red-900',
 };
 
-const statusStyle: Record<string, string> = {
+const STATUS_STYLE: Record<TicketStatus, string> = {
   OPEN: 'bg-blue-100 text-blue-700',
   IN_PROGRESS: 'bg-amber-100 text-amber-700',
   RESOLVED: 'bg-emerald-100 text-emerald-700',
   CLOSED: 'bg-gray-100 text-gray-600',
+  REJECTED: 'bg-red-100 text-red-600',
+};
+
+const CATEGORIES: TicketCategory[] = [
+  'ELECTRICAL', 'PLUMBING', 'IT_EQUIPMENT', 'FURNITURE', 'HVAC', 'SAFETY', 'CLEANING', 'OTHER',
+];
+const PRIORITIES: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const ALL_STATUSES: TicketStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED'];
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function AuthImage({ imageId, onDelete }: { imageId: number; onDelete: (id: number) => void }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let url: string;
+    ticketService.getImageBlob(imageId).then(res => {
+      url = URL.createObjectURL(res.data);
+      setSrc(url);
+    }).catch(() => {});
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [imageId]);
+
+  return (
+    <div className="relative group">
+      {src
+        ? <img src={src} alt="attachment" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
+        : <div className="w-24 h-24 bg-gray-100 rounded-lg animate-pulse" />}
+      <button
+        onClick={() => onDelete(imageId)}
+        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs hidden group-hover:flex items-center justify-center"
+      >×</button>
+    </div>
+  );
+}
+
+const emptyForm: CreateTicketRequest = {
+  title: '', location: '', category: '' as TicketCategory, description: '', priority: '' as TicketPriority,
+  preferredContactEmail: '', preferredContactPhone: '',
 };
 
 export default function IncidentsPage() {
+  const user = useAuthStore(s => s.user);
+
+  const [tickets, setTickets] = useState<TicketDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<TicketStatus | 'ALL'>('ALL');
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState<CreateTicketRequest>(emptyForm);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [creating, setCreating] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const createFileRef = useRef<HTMLInputElement>(null);
+
+  const [selected, setSelected] = useState<TicketDTO | null>(null);
+  const [newStatus, setNewStatus] = useState<TicketStatus>('OPEN');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [assignUserId, setAssignUserId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [technicians, setTechnicians] = useState<UserDTO[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [addingComment, setAddingComment] = useState(false);
+  const [editingComment, setEditingComment] = useState<TicketCommentDTO | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<TicketDTO | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { void loadTickets(); void loadTechnicians(); }, []);
+
+  async function loadTickets() {
+    try {
+      setLoading(true);
+      const res = await ticketService.getAll();
+      setTickets(res.data);
+    } catch {
+      setError('Failed to load tickets.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadTechnicians() {
+    try {
+      const res = await adminService.getAllUsers();
+      setTechnicians(res.data.filter(u => u.role === 'TECHNICAL_STAFF'));
+    } catch {
+      // non-critical, silently fail
+    }
+  }
+
+  const technicianWorkload = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayMap: Record<number, number> = {};
+    const activeMap: Record<number, number> = {};
+
+    for (const t of tickets) {
+      if (t.assignedToId) {
+        if (t.assignedAt) {
+          const assigned = new Date(t.assignedAt);
+          if (assigned >= todayStart && assigned <= todayEnd) {
+            todayMap[t.assignedToId] = (todayMap[t.assignedToId] ?? 0) + 1;
+          }
+        }
+        if (t.status === 'OPEN' || t.status === 'IN_PROGRESS') {
+          activeMap[t.assignedToId] = (activeMap[t.assignedToId] ?? 0) + 1;
+        }
+      }
+    }
+    return { today: todayMap, active: activeMap };
+  }, [tickets]);
+
+  function flashSuccess(msg: string) {
+    setSuccess(msg);
+    setTimeout(() => setSuccess(null), 3000);
+  }
+
+  function validateForm() {
+    const errs: Record<string, string> = {};
+    if (!form.title.trim()) errs.title = 'Title is required';
+    if (!form.location.trim()) errs.location = 'Location is required';
+    if (!form.category) errs.category = 'Category is required';
+    if (!form.description.trim()) errs.description = 'Description is required';
+    if (!form.priority) errs.priority = 'Priority is required';
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setAttachments(prev => [...prev, ...files].slice(0, 3));
+    if (createFileRef.current) createFileRef.current.value = '';
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!validateForm()) return;
+    try {
+      setCreating(true);
+      const res = await ticketService.create({
+        ...form,
+        title: form.title.trim(),
+        location: form.location.trim(),
+        description: form.description.trim(),
+        preferredContactEmail: form.preferredContactEmail || undefined,
+        preferredContactPhone: form.preferredContactPhone || undefined,
+      });
+      for (const file of attachments) {
+        await ticketService.uploadImage(res.data.id, file);
+      }
+      const final = attachments.length > 0 ? (await ticketService.getById(res.data.id)).data : res.data;
+      setTickets(prev => [final, ...prev]);
+      setShowCreate(false);
+      setForm(emptyForm);
+      setAttachments([]);
+      flashSuccess('Ticket created.');
+    } catch {
+      setError('Failed to create ticket.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function refreshSelected(id: number) {
+    const res = await ticketService.getById(id);
+    setSelected(res.data);
+    setTickets(prev => prev.map(t => t.id === id ? res.data : t));
+  }
+
+  function openDetail(ticket: TicketDTO) {
+    setSelected(ticket);
+    setNewStatus(ticket.status);
+    setRejectionReason('');
+    setResolutionNotes(ticket.resolutionNotes || '');
+    setAssignUserId(ticket.assignedToId?.toString() || '');
+    setCommentText('');
+    setEditingComment(null);
+  }
+
+  async function handleUpdateStatus() {
+    if (!selected) return;
+    if (newStatus === 'REJECTED' && !rejectionReason.trim()) {
+      setError('Rejection reason is required.');
+      return;
+    }
+    try {
+      setUpdatingStatus(true);
+      await ticketService.updateStatus(selected.id, {
+        status: newStatus,
+        rejectionReason: newStatus === 'REJECTED' ? rejectionReason : undefined,
+        resolutionNotes: resolutionNotes || undefined,
+      });
+      await refreshSelected(selected.id);
+      flashSuccess('Status updated.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Failed to update status.');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }
+
+  async function handleAssign() {
+    if (!selected || !assignUserId) return;
+    const id = parseInt(assignUserId);
+    if (isNaN(id)) return;
+    try {
+      setAssigning(true);
+      await ticketService.assign(selected.id, id);
+      await refreshSelected(selected.id);
+      flashSuccess('Ticket assigned.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Failed to assign ticket.');
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function handleAddComment() {
+    if (!selected || !commentText.trim()) return;
+    try {
+      setAddingComment(true);
+      await ticketService.addComment(selected.id, commentText.trim());
+      await refreshSelected(selected.id);
+      setCommentText('');
+    } catch {
+      setError('Failed to add comment.');
+    } finally {
+      setAddingComment(false);
+    }
+  }
+
+  async function handleEditComment() {
+    if (!selected || !editingComment || !editCommentText.trim()) return;
+    try {
+      await ticketService.editComment(selected.id, editingComment.id, editCommentText.trim());
+      await refreshSelected(selected.id);
+      setEditingComment(null);
+    } catch {
+      setError('Failed to edit comment.');
+    }
+  }
+
+  async function handleDeleteComment(commentId: number) {
+    if (!selected) return;
+    try {
+      await ticketService.deleteComment(selected.id, commentId);
+      await refreshSelected(selected.id);
+    } catch {
+      setError('Failed to delete comment.');
+    }
+  }
+
+  async function handleUploadImage(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selected || !e.target.files?.[0]) return;
+    if (selected.imageIds.length >= 3) { setError('Maximum 3 images allowed.'); return; }
+    try {
+      setUploading(true);
+      await ticketService.uploadImage(selected.id, e.target.files[0]);
+      await refreshSelected(selected.id);
+      flashSuccess('Image uploaded.');
+    } catch {
+      setError('Failed to upload image.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function handleDeleteImage(imageId: number) {
+    if (!selected) return;
+    try {
+      await ticketService.deleteImage(selected.id, imageId);
+      await refreshSelected(selected.id);
+    } catch {
+      setError('Failed to delete image.');
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteConfirm) return;
+    try {
+      setDeleting(true);
+      await ticketService.delete(deleteConfirm.id);
+      setTickets(prev => prev.filter(t => t.id !== deleteConfirm.id));
+      setDeleteConfirm(null);
+      flashSuccess('Ticket deleted.');
+    } catch {
+      setError('Failed to delete ticket.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const tabs: (TicketStatus | 'ALL')[] = ['ALL', ...ALL_STATUSES];
+  const filtered = filterStatus === 'ALL' ? tickets : tickets.filter(t => t.status === filterStatus);
+
+  const stats = {
+    total: tickets.length,
+    open: tickets.filter(t => t.status === 'OPEN').length,
+    inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
+    resolved: tickets.filter(t => t.status === 'RESOLVED').length,
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
+
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-campus-900">Incident Ticketing</h1>
             <p className="text-sm text-gray-500 mt-1">View, assign, and manage maintenance and incident tickets.</p>
           </div>
-          <button className="h-10 px-5 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 transition-colors">
-            + New Ticket
+          <button
+            onClick={() => { setShowCreate(true); setForm(emptyForm); setFormErrors({}); }}
+            className="h-10 px-5 bg-campus-800 text-white text-sm font-semibold rounded-xl hover:bg-campus-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14" /></svg>
+            New Ticket
           </button>
         </div>
 
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm flex items-center gap-2">
-          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" /></svg>
-          This module is under development. The interface below is a preview scaffold.
+        {/* Messages */}
+        {error && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="font-bold">×</button>
+          </div>
+        )}
+        {success && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">{success}</div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: 'Total', value: stats.total, color: 'text-campus-800' },
+            { label: 'Open', value: stats.open, color: 'text-blue-600' },
+            { label: 'In Progress', value: stats.inProgress, color: 'text-amber-600' },
+            { label: 'Resolved', value: stats.resolved, color: 'text-emerald-600' },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-gray-400 mt-1">{s.label}</p>
+            </div>
+          ))}
         </div>
 
+        {/* Filter Tabs */}
+        <div className="flex gap-1 flex-wrap">
+          {tabs.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setFilterStatus(tab)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${filterStatus === tab ? 'bg-campus-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            >
+              {tab === 'ALL' ? `All (${tickets.length})` : `${tab.replace('_', ' ')} (${tickets.filter(t => t.status === tab).length})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
-                  {['Ticket ID', 'Title', 'Reporter', 'Category', 'Priority', 'Status', 'Assigned To', 'Actions'].map((h) => (
-                    <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.map((t) => (
-                  <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-4 text-sm font-mono text-gray-500">{t.id}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-campus-800">{t.title}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{t.reporter}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{t.category}</td>
-                    <td className="px-5 py-4">
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${priorityStyle[t.priority]}`}>{t.priority}</span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${statusStyle[t.status]}`}>{t.status.replace('_', ' ')}</span>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{t.assignedTo}</td>
-                    <td className="px-5 py-4 flex gap-2">
-                      <button className="text-xs font-semibold text-campus-600 hover:text-campus-700">View</button>
-                      <button className="text-xs font-semibold text-purple-600 hover:text-purple-700">Assign</button>
-                    </td>
+          {loading ? (
+            <div className="p-12 text-center text-gray-400 text-sm">Loading tickets…</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-gray-400 text-sm">No tickets found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    {['#', 'Title', 'Reporter', 'Category', 'Priority', 'Status', 'Assigned To', 'Created', 'Actions'].map(h => (
+                      <th key={h} className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map(t => (
+                    <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                      <td className="px-5 py-4 text-sm font-mono text-gray-400">#{t.id}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-campus-800 max-w-[180px] truncate">{t.title}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{t.createdByName}</td>
+                      <td className="px-5 py-4 text-sm text-gray-500">{t.category.replace('_', ' ')}</td>
+                      <td className="px-5 py-4">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${PRIORITY_STYLE[t.priority]}`}>{t.priority}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${STATUS_STYLE[t.status]}`}>{t.status.replace('_', ' ')}</span>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-500">{t.assignedToName || '—'}</td>
+                      <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{fmtDate(t.createdAt)}</td>
+                      <td className="px-5 py-4 flex gap-3">
+                        <button onClick={() => openDetail(t)} className="text-xs font-semibold text-campus-600 hover:text-campus-800 transition-colors">View</button>
+                        <button onClick={() => setDeleteConfirm(t)} className="text-xs font-semibold text-red-400 hover:text-red-600 transition-colors">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Create Ticket Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-campus-900">New Incident Ticket</h2>
+              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">×</button>
+            </div>
+            <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Title *</label>
+                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Brief description of the issue" className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.title ? 'border-red-400' : 'border-gray-200'}`} />
+                  {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Location *</label>
+                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Building A, Room 101" className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.location ? 'border-red-400' : 'border-gray-200'}`} />
+                  {formErrors.location && <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Category *</label>
+                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as TicketCategory }))} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.category ? 'border-red-400' : 'border-gray-200'}`}>
+                    <option value="">Select category</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+                  </select>
+                  {formErrors.category && <p className="text-red-500 text-xs mt-1">{formErrors.category}</p>}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Description *</label>
+                  <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Describe the issue in detail..." className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 resize-none ${formErrors.description ? 'border-red-400' : 'border-gray-200'}`} />
+                  {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Priority *</label>
+                  <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value as TicketPriority }))} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300 ${formErrors.priority ? 'border-red-400' : 'border-gray-200'}`}>
+                    <option value="">Select priority</option>
+                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {formErrors.priority && <p className="text-red-500 text-xs mt-1">{formErrors.priority}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Contact Email</label>
+                  <input type="email" value={form.preferredContactEmail} onChange={e => setForm(f => ({ ...f, preferredContactEmail: e.target.value }))} placeholder="contact@email.com" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Contact Phone</label>
+                  <input value={form.preferredContactPhone} onChange={e => setForm(f => ({ ...f, preferredContactPhone: e.target.value }))} placeholder="07X XXXXXXX" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                </div>
+
+                {/* Attachments */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">Attachments <span className="text-gray-400 font-normal">(up to 3 images)</span></label>
+                  <div className="flex flex-wrap gap-3 mb-2">
+                    {attachments.map((file, i) => (
+                      <div key={i} className="relative group flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                        <svg className="w-4 h-4 text-campus-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path d="M15.172 7l-6.586 6.586a2 2 0 1 0 2.828 2.828l6.414-6.586a4 4 0 0 0-5.656-5.656l-6.415 6.585a6 6 0 1 0 8.486 8.486L20.5 13" /></svg>
+                        <span className="text-xs text-gray-600 max-w-[120px] truncate">{file.name}</span>
+                        <button type="button" onClick={() => removeAttachment(i)} className="text-red-400 hover:text-red-600 ml-1 text-sm font-bold">×</button>
+                      </div>
+                    ))}
+                    {attachments.length < 3 && (
+                      <button type="button" onClick={() => createFileRef.current?.click()} className="flex items-center gap-2 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-500 hover:border-campus-400 hover:text-campus-600 transition-colors">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path d="M12 5v14M5 12h14" /></svg>
+                        Add Image
+                      </button>
+                    )}
+                  </div>
+                  <input ref={createFileRef} type="file" accept="image/*" className="hidden" onChange={handleAttachmentChange} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => { setShowCreate(false); setAttachments([]); }} className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                <button type="submit" disabled={creating} className="px-5 py-2 text-sm font-semibold bg-campus-800 text-white rounded-xl hover:bg-campus-700 transition-colors disabled:opacity-60">
+                  {creating ? 'Creating…' : 'Create Ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-lg font-bold text-campus-900">Delete Ticket</h3>
+            <p className="text-sm text-gray-600">Are you sure you want to delete <strong>"{deleteConfirm.title}"</strong>? This action cannot be undone.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm font-semibold bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors disabled:opacity-60">
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-mono text-gray-400">#{selected.id}</span>
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${STATUS_STYLE[selected.status]}`}>{selected.status.replace('_', ' ')}</span>
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${PRIORITY_STYLE[selected.priority]}`}>{selected.priority}</span>
+                </div>
+                <h2 className="text-lg font-bold text-campus-900">{selected.title}</h2>
+              </div>
+              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold ml-4 shrink-0">×</button>
+            </div>
+
+            <div className="px-6 py-5 space-y-6">
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Location</p><p className="text-gray-700">{selected.location}</p></div>
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Category</p><p className="text-gray-700">{selected.category.replace('_', ' ')}</p></div>
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reported By</p><p className="text-gray-700">{selected.createdByName}</p></div>
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Assigned To</p><p className="text-gray-700">{selected.assignedToName || '—'}</p></div>
+                {selected.preferredContactEmail && <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Email</p><p className="text-gray-700">{selected.preferredContactEmail}</p></div>}
+                {selected.preferredContactPhone && <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Contact Phone</p><p className="text-gray-700">{selected.preferredContactPhone}</p></div>}
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Created</p><p className="text-gray-700">{fmtDate(selected.createdAt)}</p></div>
+                <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Last Updated</p><p className="text-gray-700">{fmtDate(selected.updatedAt)}</p></div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Description</p>
+                <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 whitespace-pre-wrap">{selected.description}</p>
+              </div>
+
+              {selected.rejectionReason && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200">
+                  <p className="text-xs font-semibold text-red-600 uppercase mb-1">Rejection Reason</p>
+                  <p className="text-sm text-red-700">{selected.rejectionReason}</p>
+                </div>
+              )}
+              {selected.resolutionNotes && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <p className="text-xs font-semibold text-emerald-600 uppercase mb-1">Resolution Notes</p>
+                  <p className="text-sm text-emerald-700">{selected.resolutionNotes}</p>
+                </div>
+              )}
+
+              {/* Admin Controls */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Status Update */}
+                <div className="border border-gray-100 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Update Status</p>
+                  <select
+                    value={newStatus}
+                    onChange={e => setNewStatus(e.target.value as TicketStatus)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                  >
+                    {ALL_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                  </select>
+                  {newStatus === 'REJECTED' && (
+                    <input value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Rejection reason *" className="w-full border border-red-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                  )}
+                  {(newStatus === 'RESOLVED' || newStatus === 'CLOSED') && (
+                    <input value={resolutionNotes} onChange={e => setResolutionNotes(e.target.value)} placeholder="Resolution notes" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                  )}
+                  <button onClick={handleUpdateStatus} disabled={updatingStatus} className="w-full py-1.5 text-sm font-semibold bg-campus-800 text-white rounded-lg hover:bg-campus-700 transition-colors disabled:opacity-60">
+                    {updatingStatus ? 'Saving…' : 'Update Status'}
+                  </button>
+                </div>
+
+                {/* Assign Technician */}
+                <div className="border border-gray-100 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Assign Technician</p>
+                  {technicians.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No technical staff accounts found.</p>
+                  ) : (
+                    <select
+                      value={assignUserId}
+                      onChange={e => setAssignUserId(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-campus-300"
+                    >
+                      <option value="">— Select technician —</option>
+                      {technicians.map(tech => {
+                        const todayCount = technicianWorkload.today[tech.id] ?? 0;
+                        const activeCount = technicianWorkload.active[tech.id] ?? 0;
+                        const atLimit = todayCount >= 5;
+                        const label = atLimit
+                          ? `${tech.name} — FULL (${todayCount}/5 today)`
+                          : `${tech.name} — ${todayCount}/5 today, ${activeCount} active`;
+                        return (
+                          <option key={tech.id} value={tech.id} disabled={atLimit}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                  {assignUserId && (
+                    <div className="flex items-center gap-2 text-xs">
+                      {(() => {
+                        const tech = technicians.find(t => t.id === parseInt(assignUserId));
+                        const todayCount = tech ? (technicianWorkload.today[tech.id] ?? 0) : 0;
+                        const activeCount = tech ? (technicianWorkload.active[tech.id] ?? 0) : 0;
+                        const atLimit = todayCount >= 5;
+                        if (atLimit) return (
+                          <><span className="w-2 h-2 rounded-full bg-red-500 shrink-0" /><span className="text-red-600 font-medium">{tech?.name} has reached the daily limit of 5 tickets.</span></>
+                        );
+                        if (todayCount > 0) return (
+                          <><span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" /><span className="text-gray-500">{tech?.name} has <strong>{todayCount}</strong>/5 today, <strong>{activeCount}</strong> currently active.</span></>
+                        );
+                        return (
+                          <><span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" /><span className="text-gray-500">{tech?.name} is free today — 0/5 assigned.</span></>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleAssign}
+                    disabled={assigning || !assignUserId || (technicianWorkload.today[parseInt(assignUserId)] ?? 0) >= 5}
+                    className="w-full py-1.5 text-sm font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-60"
+                  >
+                    {assigning ? 'Assigning…' : 'Assign'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Images */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase">Images ({selected.imageIds.length}/3)</p>
+                  {selected.imageIds.length < 3 && (
+                    <>
+                      <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-xs font-semibold text-campus-600 hover:text-campus-800 transition-colors disabled:opacity-60">
+                        {uploading ? 'Uploading…' : '+ Upload Image'}
+                      </button>
+                      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUploadImage} />
+                    </>
+                  )}
+                </div>
+                {selected.imageIds.length === 0 ? (
+                  <p className="text-sm text-gray-400">No images attached.</p>
+                ) : (
+                  <div className="flex gap-3 flex-wrap">
+                    {selected.imageIds.map(id => (
+                      <AuthImage key={id} imageId={id} onDelete={handleDeleteImage} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Comments */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-3">Comments ({selected.comments.length})</p>
+                <div className="space-y-3 mb-4">
+                  {selected.comments.length === 0 && <p className="text-sm text-gray-400">No comments yet.</p>}
+                  {selected.comments.map(c => (
+                    <div key={c.id} className="bg-gray-50 rounded-xl p-3">
+                      {editingComment?.id === c.id ? (
+                        <div className="flex gap-2">
+                          <input value={editCommentText} onChange={e => setEditCommentText(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300" />
+                          <button onClick={handleEditComment} className="text-xs font-semibold text-campus-600 px-3">Save</button>
+                          <button onClick={() => setEditingComment(null)} className="text-xs text-gray-400 px-2">Cancel</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-campus-800">{c.authorName}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-gray-400">{fmtDate(c.createdAt)}</span>
+                              {(c.authorId === user?.id || user?.role === 'ADMIN') && (
+                                <>
+                                  {c.authorId === user?.id && <button onClick={() => { setEditingComment(c); setEditCommentText(c.content); }} className="text-[10px] text-campus-500 hover:text-campus-700">Edit</button>}
+                                  <button onClick={() => handleDeleteComment(c.id)} className="text-[10px] text-red-400 hover:text-red-600">Delete</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-700">{c.content}</p>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    placeholder="Add a comment…"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-campus-300"
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAddComment(); } }}
+                  />
+                  <button onClick={handleAddComment} disabled={addingComment || !commentText.trim()} className="px-4 py-2 text-sm font-semibold bg-campus-800 text-white rounded-xl hover:bg-campus-700 transition-colors disabled:opacity-60">
+                    {addingComment ? '…' : 'Post'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
