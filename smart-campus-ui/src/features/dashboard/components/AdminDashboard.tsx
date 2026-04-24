@@ -8,12 +8,14 @@ import { ticketService, type TicketDTO } from '@/services/ticketService';
 import { announcementService, type ScheduledAnnouncementDTO } from '@/services/announcementService';
 import { courseOfferingService, type CourseOfferingDTO } from '@/services/courseOfferingService';
 import { assetService, type AssetDTO } from '@/services/assetService';
+import AnalyticsSection from './AnalyticsSection';
 
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
   const [users, setUsers] = useState<UserDTO[]>([]);
   const [pendingBookings, setPendingBookings] = useState<BookingDTO[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
+  const [allBookings, setAllBookings] = useState<BookingDTO[]>([]);
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [tickets, setTickets] = useState<TicketDTO[]>([]);
   const [announcements, setAnnouncements] = useState<ScheduledAnnouncementDTO[]>([]);
@@ -28,6 +30,9 @@ export default function AdminDashboard() {
         setPendingTotal(res.data.totalElements ?? res.data.content.length);
       })
       .catch(() => {});
+    bookingService.getAllBookings(undefined, undefined, undefined, 0, 500)
+      .then((res) => setAllBookings(res.data.content))
+      .catch(() => setAllBookings([]));
     resourceService.getAll().then((res) => setResources(res.data)).catch(() => {});
     ticketService.getAll().then((res) => setTickets(res.data)).catch(() => setTickets([]));
     announcementService.list().then((res) => setAnnouncements(res.data)).catch(() => setAnnouncements([]));
@@ -120,6 +125,15 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Analytics */}
+      <AnalyticsSection
+        users={users}
+        bookings={allBookings}
+        tickets={tickets}
+        resources={resources}
+        offerings={offerings}
+      />
 
       {/* Quick Actions */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
