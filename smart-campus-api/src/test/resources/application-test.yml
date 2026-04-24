@@ -32,7 +32,7 @@ app:
     admin-password: TestAdmin123!
     admin-name: Test Admin
   ai:
-    provider: openai
+    provider: ${AI_PROVIDER:groq}
     max-tool-iterations: 4
     request-timeout-ms: 30000
     openai:
@@ -42,4 +42,4 @@ app:
     groq:
       api-key: ${GROQ_API_KEY:}
       base-url: https://api.groq.com/openai/v1
-      model: meta-llama/llama-4-scout-17b-16e-instruct
+      model: ${GROQ_MODEL:meta-llama/llama-4-scout-17b-16e-instruct}

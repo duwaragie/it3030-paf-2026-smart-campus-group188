@@ -60,7 +60,12 @@ class AiChatJudgeTest {
     private String jwt;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws InterruptedException {
+        // Groq free tier TPM (30K on scout) is tight for 10 sequential chat calls (~4.5K each).
+        // A short spacer here spreads tokens across a wider rolling window so we stay under.
+        // OpenAI-backed runs ignore this as a harmless cost.
+        Thread.sleep(5_000);
+
         // Fresh student on every case so data state is predictable.
         userRepository.findByEmail("eval-student@test.local").ifPresent(userRepository::delete);
         User student = new User();

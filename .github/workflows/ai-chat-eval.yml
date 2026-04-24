@@ -15,11 +15,12 @@ jobs:
         working-directory: smart-campus-api
 
     env:
-      # Chat endpoint + judge both hit OpenAI; same key is reused.
+      # Chat runs on Groq (free tier); judge runs on OpenAI gpt-4o-mini (strict rubric grading).
+      AI_PROVIDER: groq
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: meta-llama/llama-4-scout-17b-16e-instruct
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_MODEL: gpt-4o-mini
       JUDGE_MODEL: gpt-4o-mini
-      AI_PROVIDER: openai
       # H2 is the test DB; these are just the placeholders required by the shared env-var plumbing.
       DB_USERNAME: sa
       DB_PASSWORD: password
@@ -40,10 +41,13 @@ jobs:
           java-version: '25'
           cache: 'maven'
 
-      - name: Guard — OPENAI_API_KEY present
+      - name: Guard — required secrets present
         run: |
-          if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "::error::OPENAI_API_KEY secret is not set. Add it in GitHub repo Settings → Secrets → Actions."
+          missing=""
+          [ -z "${GROQ_API_KEY:-}" ] && missing="$missing GROQ_API_KEY"
+          [ -z "${OPENAI_API_KEY:-}" ] && missing="$missing OPENAI_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing. Add them in repo Settings → Secrets → Actions."
             exit 1
           fi
 
