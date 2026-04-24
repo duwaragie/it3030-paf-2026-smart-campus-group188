@@ -37,6 +37,7 @@ import DashboardShuttleMap from './features/shuttle/pages/DashboardShuttleMap';
 import AdminShuttleRoutesPage from './features/admin/pages/AdminShuttleRoutesPage';
 import MyTicketsPage from './features/maintenance/pages/MyTicketsPage';
 import TechnicianDashboardPage from './features/technician/pages/TechnicianDashboardPage';
+import { ChatBubble } from './features/chatbot';
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -141,6 +142,7 @@ function App() {
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <ChatBubble />
     </>
   );
 }
