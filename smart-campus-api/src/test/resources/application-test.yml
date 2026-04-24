@@ -31,3 +31,15 @@ app:
     admin-email: admin@test.com
     admin-password: TestAdmin123!
     admin-name: Test Admin
+  ai:
+    provider: openai
+    max-tool-iterations: 4
+    request-timeout-ms: 30000
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: https://api.openai.com/v1
+      model: gpt-4o-mini
+    groq:
+      api-key: ${GROQ_API_KEY:}
+      base-url: https://api.groq.com/openai/v1
+      model: meta-llama/llama-4-scout-17b-16e-instruct
