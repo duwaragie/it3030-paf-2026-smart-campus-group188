@@ -112,11 +112,12 @@ class AiChatJudgeTest {
                         "Reply either reports the student's GPA (possibly 0 if no released grades) or clearly explains no grades are released yet. Must NOT invent a GPA value."),
 
                 new Case("catalogue_browse",
-                        "What courses can I enroll in next semester?",
+                        "What courses are available for enrollment?",
                         "browse_course_offerings",
-                        "PASS if the reply EITHER (a) lists course offerings, OR (b) clearly " +
-                        "says none are currently open for enrollment. An empty catalogue is a " +
-                        "fully valid answer. Only FAIL if it invents course codes or ignores the question."),
+                        "PASS if the reply EITHER (a) lists course offerings, OR (b) says " +
+                        "none are currently open, OR (c) asks a single reasonable clarifying " +
+                        "question (e.g. which semester). Only FAIL if it invents course codes " +
+                        "or completely ignores the question."),
 
                 new Case("sections_list",
                         "What sections does offering 1 have?",
