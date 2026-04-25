@@ -27,7 +27,6 @@ const STATUS_STYLES: Record<BookingStatus, { bar: string; text: string; dot: str
   COMPLETED: { bar: 'bg-blue-100 text-blue-900 border border-blue-200', text: 'text-blue-800', dot: 'bg-blue-500' },
 };
 
-const AXIS_TICKS = 6;
 const LABEL_WIDTH = 240;
 const USER_BAR_STYLE = 'bg-campus-700 text-white border border-campus-800/10';
 const MIN_ZOOM = 0.75;
@@ -89,7 +88,6 @@ function buildTimelineRows(bookings: BookingDTO[]): { rows: TimelineRow[]; range
   const padding = Math.max(30 * 60 * 1000, Math.round((latestEnd - earliestStart) * 0.08));
   const rangeStartMs = earliestStart - padding;
   const rangeEndMs = latestEnd + padding;
-  const totalSpanMs = Math.max(rangeEndMs - rangeStartMs, 1);
 
   const grouped = new Map<string, TimelineBooking[]>();
 
@@ -133,7 +131,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
 
   const timeline = useMemo(() => buildTimelineRows(scopedBookings), [scopedBookings]);
   const [zoom, setZoom] = useState(1);
-  const [density, setDensity] = useState<DensityPreset>('comfortable');
+  const density: DensityPreset = 'relaxed';
 
   const chartDurationMs = Math.max(timeline.rangeEndMs - timeline.rangeStartMs, 1);
   const chartWidthPx = timeline.rows.length > 0
@@ -168,7 +166,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="text-base font-bold text-campus-900">Booking Gantt Chart</h2>
+            <h2 className="text-base font-bold text-campus-900">Timetable</h2>
             <p className="text-xs text-gray-500 mt-1">
               {scope === 'admin'
                 ? 'Shows booking owner, purpose, and status across each resource timeline.'
@@ -188,7 +186,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
                 -
               </button>
               <input
-                aria-label="Gantt scale"
+                aria-label="Timetable scale"
                 type="range"
                 min={MIN_ZOOM}
                 max={MAX_ZOOM}
@@ -211,18 +209,6 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
               >
                 Reset
               </button>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-1 flex gap-1">
-                {(['compact', 'comfortable', 'relaxed'] as DensityPreset[]).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setDensity(option)}
-                    className={`h-7 px-3 rounded-md text-[11px] font-semibold capitalize transition-colors ${density === option ? 'bg-campus-700 text-white' : 'text-gray-600 hover:bg-white'}`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -239,7 +225,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
           <div className="grid border-b border-gray-100 bg-gray-50/60" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-            <div className="px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">Resource</div>
+            <div className="sticky left-0 z-20 bg-gray-50/95 px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-400 border-r border-gray-100">Resource</div>
             <div className="relative px-4 py-3">
               <div className="relative h-full" style={{ width: chartWidthPx }}>
                 {ticks.map((tick, index) => (
@@ -262,7 +248,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
 
               return (
                 <div key={row.resourceName} className="grid border-b border-gray-50 last:border-b-0" style={{ gridTemplateColumns: `${LABEL_WIDTH}px 1fr` }}>
-                  <div className="px-5 py-4 border-r border-gray-50">
+                  <div className="sticky left-0 z-10 bg-white px-5 py-4 border-r border-gray-100">
                     <p className="text-sm font-semibold text-campus-800 truncate">{row.resourceName}</p>
                     {row.locationName && <p className="text-xs text-gray-500 mt-1 truncate">{row.locationName}</p>}
                   </div>
