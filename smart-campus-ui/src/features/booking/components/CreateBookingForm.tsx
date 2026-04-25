@@ -21,6 +21,7 @@ interface CreateBookingFormProps {
   editingBooking?: BookingDTO;
   onSuccess?: () => void;
   onCancel?: () => void;
+  onResourceChange?: (resourceId?: number) => void;
 }
 
 /**
@@ -34,7 +35,7 @@ function toDatetimeLocal(value?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function CreateBookingForm({ resourceId, resourceName, editingBooking, onSuccess, onCancel }: CreateBookingFormProps) {
+export function CreateBookingForm({ resourceId, resourceName, editingBooking, onSuccess, onCancel, onResourceChange }: CreateBookingFormProps) {
   const [loading, setLoading] = useState(false);
   const [resources, setResources] = useState<ResourceDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +81,11 @@ export function CreateBookingForm({ resourceId, resourceName, editingBooking, on
     [resources, selectedResourceId],
   );
   const capacityHint = selectedResource?.capacity ?? null;
+
+  useEffect(() => {
+    const numericResourceId = selectedResourceId ? Number(selectedResourceId) : undefined;
+    onResourceChange?.(numericResourceId);
+  }, [selectedResourceId, onResourceChange]);
 
   // When editing or navigating with ?resourceId=, re-apply the value once dropdown options land.
   useEffect(() => {

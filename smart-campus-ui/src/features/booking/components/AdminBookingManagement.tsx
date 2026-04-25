@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BookingDTO, BookingStatus } from '@/services/bookingService';
 import { bookingService } from '@/services/bookingService';
+import { BookingGanttChart } from './BookingGanttChart';
 
 type ConfirmAction = { type: 'approve'; booking: BookingDTO } | { type: 'reject'; booking: BookingDTO; reason: string } | { type: 'admin-cancel'; booking: BookingDTO; reason: string };
 
@@ -167,6 +168,8 @@ export function AdminBookingManagement() {
           </button>
         ))}
       </div>
+
+      <BookingGanttChart bookings={bookings} scope="admin" />
 
       {confirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
