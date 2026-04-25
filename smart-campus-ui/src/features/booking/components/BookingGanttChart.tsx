@@ -42,6 +42,8 @@ const DENSITY_PRESETS = {
   relaxed: { laneStep: 40, barHeight: 26, rowPadding: 20 },
 } as const;
 
+const USER_VISIBLE_STATUSES: BookingStatus[] = ['APPROVED', 'COMPLETED'];
+
 type DensityPreset = keyof typeof DENSITY_PRESETS;
 
 function toMs(value: string): number {
@@ -124,7 +126,12 @@ function buildTimelineRows(bookings: BookingDTO[]): { rows: TimelineRow[]; range
 }
 
 export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
-  const timeline = useMemo(() => buildTimelineRows(bookings), [bookings]);
+  const scopedBookings = useMemo(
+    () => (scope === 'user' ? bookings.filter((booking) => USER_VISIBLE_STATUSES.includes(booking.status)) : bookings),
+    [bookings, scope],
+  );
+
+  const timeline = useMemo(() => buildTimelineRows(scopedBookings), [scopedBookings]);
   const [zoom, setZoom] = useState(1);
   const [density, setDensity] = useState<DensityPreset>('comfortable');
 
@@ -165,7 +172,7 @@ export function BookingGanttChart({ bookings, scope }: BookingGanttChartProps) {
             <p className="text-xs text-gray-500 mt-1">
               {scope === 'admin'
                 ? 'Shows booking owner, purpose, and status across each resource timeline.'
-                : 'Shows booked slots only. Empty gaps are available time.'}
+                : 'Shows confirmed booked slots only. Empty gaps are available time.'}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
