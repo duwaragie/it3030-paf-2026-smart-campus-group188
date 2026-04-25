@@ -1,0 +1,19 @@
+backend run
+
+.\mvnw.cmd spring-boot:run
+
+
+frontend run
+
+npm run dev
+
+
+
+seedUser("student@test.com", "Test Student", "Student@1234!",
+                Role.STUDENT, "STU-0001", null);
+
+seedUser("lecturer@test.com", "Test Lecturer", "Lecturer@1234!",
+                Role.LECTURER, null, "EMP-0002");
+
+admin-email: ${SEED_ADMIN_EMAIL:smartcampus.team@gmail.com}
+admin-password: ${SEED_ADMIN_PASSWORD:Admin@1234!}
